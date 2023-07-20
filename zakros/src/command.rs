@@ -3,8 +3,6 @@ mod list;
 mod server;
 mod string;
 
-use std::net::SocketAddr;
-
 use crate::{
     connection::RedisConnection,
     error::Error,
@@ -13,148 +11,170 @@ use crate::{
     RedisResult,
 };
 use serde::{Deserialize, Serialize};
+use std::{fmt::Display, net::SocketAddr};
 use zakros_raft::async_trait::async_trait;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RedisCommand {
+    Write(WriteCommand),
+    Read(ReadCommand),
+    Stateless(StatelessCommand),
+    Connection(ConnectionCommand),
+    Transaction(TransactionCommand),
+}
+
+impl Display for RedisCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Write(command) => write!(f, "{}", command),
+            Self::Read(command) => write!(f, "{}", command),
+            Self::Stateless(command) => write!(f, "{}", command),
+            Self::Connection(command) => write!(f, "{}", command),
+            Self::Transaction(command) => write!(f, "{}", command),
+        }
+    }
+}
+
+impl RedisCommand {
+    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
+        let bytes = &bytes.to_ascii_uppercase();
+        if let Some(command) = WriteCommand::parse(bytes) {
+            return Ok(Self::Write(command));
+        }
+        if let Some(command) = ReadCommand::parse(bytes) {
+            return Ok(Self::Read(command));
+        }
+        if let Some(command) = StatelessCommand::parse(bytes) {
+            return Ok(Self::Stateless(command));
+        }
+        if let Some(command) = ConnectionCommand::parse(bytes) {
+            return Ok(Self::Connection(command));
+        }
+        if let Some(command) = TransactionCommand::parse(bytes) {
+            return Ok(Self::Transaction(command));
+        }
+        Err(Error::UnknownCommand)
+    }
+}
+
 macro_rules! commands {
-    ($($name:ident => $variant:ident,)*) => {
+    (
+        $kind:ident,
+        $($name:ident => $id:ident,)*
+    ) => {
         #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-        pub enum RedisCommand {
-            $($variant,)*
+        pub enum $kind {
+            $($id,)*
         }
 
-        impl std::fmt::Display for RedisCommand {
+        impl std::fmt::Display for $kind {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}", match self {
-                    $(Self::$variant => stringify!($name),)*
+                    $(Self::$id => stringify!($name),)*
                 })
             }
         }
 
-        impl RedisCommand {
-            pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
+        impl $kind {
+            fn parse(bytes: &[u8]) -> Option<Self> {
                 $(
                     const $name: &[u8] = stringify!($name).as_bytes();
                 )*
-                match bytes.to_ascii_uppercase().as_slice() {
-                    $($name => Ok(Self::$variant),)*
-                    _ => Err(Error::UnknownCommand),
-                }
-            }
-
-            pub const fn kind(&self) -> CommandKind {
-                match self {
-                    $(Self::$variant => $variant::KIND),*
-                }
-            }
-
-            pub fn call<'a, D: RwLockable<'a, Dictionary>>(&self, dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
-                match self {
-                    $(Self::$variant => <$variant as Command<_>>::call(dict, args)),*
+                match bytes {
+                    $($name => Some(Self::$id),)*
+                    _ => None,
                 }
             }
         }
-
-        $(pub enum $variant {})*
     }
 }
 
-#[derive(PartialEq, Eq)]
-pub enum CommandKind {
-    Write,
-    Read,
-    Stateless,
-    Connection,
-}
+macro_rules! write_commands {
+    ($($name:ident => $id:ident,)*) => {
+        commands!(WriteCommand, $($name => $id,)*);
+        $(enum $id {})*
 
-mod marker {
-    pub enum Write {}
-    pub enum Read {}
-    pub enum Stateless {}
-    pub enum Connection {}
-}
-
-trait Command<T> {
-    const KIND: CommandKind;
-
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult;
-}
-
-pub trait WriteCommand {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult;
-}
-
-impl<C: WriteCommand> Command<marker::Write> for C {
-    const KIND: CommandKind = CommandKind::Write;
-
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
-        Self::call(dict, args)
+        impl WriteCommand {
+            pub fn call<'a, D: RwLockable<'a, Dictionary>>(
+                &self,
+                dict: &'a D,
+                args: &[Vec<u8>],
+            ) -> RedisResult {
+                match self {
+                    $(Self::$id => $id::call(dict, args),)*
+                }
+            }
+        }
     }
 }
 
-pub trait ReadCommand {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult;
-}
+macro_rules! read_commands {
+    ($($name:ident => $id:ident,)*) => {
+        commands!(ReadCommand, $($name => $id,)*);
+        $(enum $id {})*
 
-impl<C: ReadCommand> Command<marker::Read> for C {
-    const KIND: CommandKind = CommandKind::Read;
-
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
-        Self::call(dict, args)
+        impl ReadCommand {
+            pub fn call<'a, D: ReadLockable<'a, Dictionary>>(
+                &self,
+                dict: &'a D,
+                args: &[Vec<u8>],
+            ) -> RedisResult {
+                match self {
+                    $(Self::$id => $id::call(dict, args),)*
+                }
+            }
+        }
     }
 }
 
-pub trait StatelessCommand {
-    fn call(args: &[Vec<u8>]) -> RedisResult;
-}
+macro_rules! stateless_commands {
+    ($($name:ident => $id:ident,)*) => {
+        commands!(StatelessCommand, $($name => $id,)*);
+        $(enum $id {})*
 
-impl<C: StatelessCommand> Command<marker::Stateless> for C {
-    const KIND: CommandKind = CommandKind::Stateless;
-
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(_: &D, args: &[Vec<u8>]) -> RedisResult {
-        Self::call(args)
+        impl StatelessCommand {
+            pub fn call(&self, args: &[Vec<u8>]) -> RedisResult {
+                match self {
+                    $(Self::$id => $id::call(args),)*
+                }
+            }
+        }
     }
 }
 
-#[async_trait]
-pub trait ConnectionCommand {
-    async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult;
-}
+macro_rules! connecion_commands {
+    ($($name:ident => $id:ident,)*) => {
+        commands!(ConnectionCommand, $($name => $id,)*);
+        $(enum $id {})*
 
-impl<C: ConnectionCommand> Command<marker::Connection> for C {
-    const KIND: CommandKind = CommandKind::Connection;
-
-    fn call<'a, D: RwLockable<'a, Dictionary>>(_: &'a D, _: &[Vec<u8>]) -> RedisResult {
-        unreachable!()
+        impl ConnectionCommand {
+            pub async fn call(&self, conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult {
+                match self {
+                    $(Self::$id => $id::call(conn, args).await,)*
+                }
+            }
+        }
     }
 }
 
-commands! {
+macro_rules! transaction_commands {
+    ($($name:ident => $id:ident,)*) => {
+        commands!(TransactionCommand, $($name => $id,)*);
+    }
+}
+
+write_commands! {
     APPEND => Append,
-    CLUSTER => Cluster,
-    DBSIZE => DbSize,
     DEL => Del,
-    DISCARD => Discard,
-    ECHO => Echo,
-    EXEC => Exec,
-    EXISTS => Exists,
     FLUSHALL => FlushAll,
     FLUSHDB => FlushDb,
-    GET => Get,
-    GETRANGE => GetRange,
-    KEYS => Keys,
-    LINDEX => LIndex,
-    LLEN => LLen,
     LPOP => LPop,
     LPUSH => LPush,
     LPUSHX => LPushX,
-    LRANGE => LRange,
     LSET => LSet,
     LTRIM => LTrim,
-    MGET => MGet,
     MSET => MSet,
     MSETNX => MSetNx,
-    MULTI => Multi,
-    PING => Ping,
     RENAME => Rename,
     RENAMENX => RenameNx,
     RPOP => RPop,
@@ -162,13 +182,57 @@ commands! {
     RPUSHX => RPushX,
     SET => Set,
     SETRANGE => SetRange,
+}
+
+read_commands! {
+    DBSIZE => DbSize,
+    EXISTS => Exists,
+    GET => Get,
+    GETRANGE => GetRange,
+    KEYS => Keys,
+    LINDEX => LIndex,
+    LLEN => LLen,
+    LRANGE => LRange,
+    MGET => MGet,
     STRLEN => StrLen,
-    TIME => Time,
     TYPE => Type,
 }
 
+stateless_commands! {
+    ECHO => Echo,
+    PING => Ping,
+    TIME => Time,
+}
+
+connecion_commands! {
+    CLUSTER => Cluster,
+}
+
+transaction_commands! {
+    DISCARD => Discard,
+    EXEC => Exec,
+    MULTI => Multi,
+}
+
+trait WriteCommandHandler {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult;
+}
+
+trait ReadCommandHandler {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult;
+}
+
+trait StatelessCommandHandler {
+    fn call(args: &[Vec<u8>]) -> RedisResult;
+}
+
 #[async_trait]
-impl ConnectionCommand for Cluster {
+trait ConnectionCommandHandler {
+    async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult;
+}
+
+#[async_trait]
+impl ConnectionCommandHandler for Cluster {
     async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult {
         let &[subcommand, _args @ ..] = &args else {
             return Err(Error::WrongArity);
@@ -207,26 +271,5 @@ impl ConnectionCommand for Cluster {
             b"INFO" | b"NODES" => todo!(),
             _ => Err(Error::UnknownSubcommand),
         }
-    }
-}
-
-#[async_trait]
-impl ConnectionCommand for Discard {
-    async fn call(_: &mut RedisConnection, _: &[Vec<u8>]) -> RedisResult {
-        unreachable!()
-    }
-}
-
-#[async_trait]
-impl ConnectionCommand for Exec {
-    async fn call(_: &mut RedisConnection, _: &[Vec<u8>]) -> RedisResult {
-        unreachable!()
-    }
-}
-
-#[async_trait]
-impl ConnectionCommand for Multi {
-    async fn call(_: &mut RedisConnection, _: &[Vec<u8>]) -> RedisResult {
-        unreachable!()
     }
 }

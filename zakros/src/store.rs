@@ -1,4 +1,9 @@
-use crate::{command::RedisCommand, object::RedisObject, resp::RedisValue, RedisResult};
+use crate::{
+    command::{RedisCommand, WriteCommand},
+    object::RedisObject,
+    resp::RedisValue,
+    RedisResult,
+};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -30,7 +35,10 @@ pub struct Query {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
-    Single(Query),
+    SingleWrite {
+        command: WriteCommand,
+        args: Vec<Vec<u8>>,
+    },
     Exec(Vec<Query>),
 }
 
@@ -41,12 +49,20 @@ impl StateMachine for Store {
 
     async fn apply(&mut self, command: Self::Command) -> Self::Output {
         match command {
-            Command::Single(Query { command, args }) => command.call(self.deref().deref(), &args),
+            Command::SingleWrite { command, args } => command.call(self.deref().deref(), &args),
             Command::Exec(queries) => {
+                let mut responses = Vec::with_capacity(queries.len());
                 let dict = RefCell::new(self.write());
-                let mut responses = Vec::new();
                 for Query { command, args } in queries {
-                    responses.push(command.call(&dict, &args).unwrap());
+                    let res = match command {
+                        RedisCommand::Write(command) => command.call(&dict, &args),
+                        RedisCommand::Read(command) => command.call(&dict, &args),
+                        RedisCommand::Stateless(command) => command.call(&args),
+                        RedisCommand::Connection(_) | RedisCommand::Transaction(_) => {
+                            unreachable!()
+                        }
+                    };
+                    responses.push(res.unwrap());
                 }
                 Ok(RedisValue::Array(responses))
             }

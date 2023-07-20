@@ -1,4 +1,4 @@
-use super::{ReadCommand, WriteCommand};
+use super::{ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -8,7 +8,7 @@ use crate::{
     RedisResult,
 };
 
-impl WriteCommand for command::Del {
+impl WriteCommandHandler for command::Del {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
             return Err(Error::WrongArity);
@@ -24,7 +24,7 @@ impl WriteCommand for command::Del {
     }
 }
 
-impl ReadCommand for command::Exists {
+impl ReadCommandHandler for command::Exists {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
             return Err(Error::WrongArity);
@@ -40,7 +40,7 @@ impl ReadCommand for command::Exists {
     }
 }
 
-impl ReadCommand for command::Keys {
+impl ReadCommandHandler for command::Keys {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [pattern] = args else {
             return Err(Error::WrongArity);
@@ -55,7 +55,7 @@ impl ReadCommand for command::Keys {
     }
 }
 
-impl WriteCommand for command::Rename {
+impl WriteCommandHandler for command::Rename {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, new_key] = args else {
             return Err(Error::WrongArity);
@@ -71,7 +71,7 @@ impl WriteCommand for command::Rename {
     }
 }
 
-impl WriteCommand for command::RenameNx {
+impl WriteCommandHandler for command::RenameNx {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, new_key] = args else {
             return Err(Error::WrongArity);
@@ -89,7 +89,7 @@ impl WriteCommand for command::RenameNx {
     }
 }
 
-impl ReadCommand for command::Type {
+impl ReadCommandHandler for command::Type {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
             return Err(Error::WrongArity);

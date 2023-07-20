@@ -1,4 +1,4 @@
-use super::{ReadCommand, StatelessCommand, WriteCommand};
+use super::{ReadCommandHandler, StatelessCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -8,7 +8,7 @@ use crate::{
 };
 use std::time::{Duration, SystemTime};
 
-impl ReadCommand for command::DbSize {
+impl ReadCommandHandler for command::DbSize {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
             Ok((dict.read().len() as i64).into())
@@ -18,7 +18,7 @@ impl ReadCommand for command::DbSize {
     }
 }
 
-impl StatelessCommand for command::Echo {
+impl StatelessCommandHandler for command::Echo {
     fn call(args: &[Vec<u8>]) -> RedisResult {
         match args {
             [message] => Ok(message.clone().into()),
@@ -27,19 +27,19 @@ impl StatelessCommand for command::Echo {
     }
 }
 
-impl WriteCommand for command::FlushAll {
+impl WriteCommandHandler for command::FlushAll {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         flush(dict, args)
     }
 }
 
-impl WriteCommand for command::FlushDb {
+impl WriteCommandHandler for command::FlushDb {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         flush(dict, args)
     }
 }
 
-impl StatelessCommand for command::Ping {
+impl StatelessCommandHandler for command::Ping {
     fn call(args: &[Vec<u8>]) -> RedisResult {
         match args {
             [] => Ok("PONG".into()),
@@ -49,7 +49,7 @@ impl StatelessCommand for command::Ping {
     }
 }
 
-impl StatelessCommand for command::Time {
+impl StatelessCommandHandler for command::Time {
     fn call(args: &[Vec<u8>]) -> RedisResult {
         if !args.is_empty() {
             return Err(Error::WrongArity);

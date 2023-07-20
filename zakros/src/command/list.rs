@@ -1,4 +1,4 @@
-use super::{ReadCommand, WriteCommand};
+use super::{ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -9,7 +9,7 @@ use crate::{
 };
 use std::collections::{hash_map::Entry, VecDeque};
 
-impl ReadCommand for command::LIndex {
+impl ReadCommandHandler for command::LIndex {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, index] = args else {
             return Err(Error::WrongArity);
@@ -33,7 +33,7 @@ impl ReadCommand for command::LIndex {
     }
 }
 
-impl ReadCommand for command::LLen {
+impl ReadCommandHandler for command::LLen {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
             return Err(Error::WrongArity);
@@ -46,25 +46,25 @@ impl ReadCommand for command::LLen {
     }
 }
 
-impl WriteCommand for command::LPop {
+impl WriteCommandHandler for command::LPop {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         pop(dict, args, VecDeque::pop_front)
     }
 }
 
-impl WriteCommand for command::LPush {
+impl WriteCommandHandler for command::LPush {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         push::<_, _, false>(dict, args, VecDeque::push_front)
     }
 }
 
-impl WriteCommand for command::LPushX {
+impl WriteCommandHandler for command::LPushX {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         push::<_, _, true>(dict, args, VecDeque::push_front)
     }
 }
 
-impl ReadCommand for command::LRange {
+impl ReadCommandHandler for command::LRange {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, start, stop] = args else {
             return Err(Error::WrongArity);
@@ -98,25 +98,25 @@ impl ReadCommand for command::LRange {
     }
 }
 
-impl WriteCommand for command::RPop {
+impl WriteCommandHandler for command::RPop {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         pop(dict, args, VecDeque::pop_back)
     }
 }
 
-impl WriteCommand for command::RPush {
+impl WriteCommandHandler for command::RPush {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         push::<_, _, false>(dict, args, VecDeque::push_back)
     }
 }
 
-impl WriteCommand for command::RPushX {
+impl WriteCommandHandler for command::RPushX {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         push::<_, _, true>(dict, args, VecDeque::push_back)
     }
 }
 
-impl WriteCommand for command::LSet {
+impl WriteCommandHandler for command::LSet {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, index, element] = args else {
             return Err(Error::WrongArity);
@@ -141,7 +141,7 @@ impl WriteCommand for command::LSet {
     }
 }
 
-impl WriteCommand for command::LTrim {
+impl WriteCommandHandler for command::LTrim {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, start, stop] = args else {
             return Err(Error::WrongArity);

@@ -1,5 +1,5 @@
 use crate::{
-    command::{CommandKind, ConnectionCommand, RedisCommand},
+    command::{RedisCommand, TransactionCommand},
     error::{Error, TransactionError},
     resp::{QueryDecoder, RedisValue, ResponseEncoder},
     store::{Command, Query},
@@ -103,8 +103,8 @@ impl RedisConnection {
         // TODO: check arity
 
         match command {
-            RedisCommand::Multi => {
-                return match self.txn {
+            RedisCommand::Transaction(txn_command) => match txn_command {
+                TransactionCommand::Multi => match self.txn {
                     Transaction::Inactive => {
                         self.txn = Transaction::Queued(Default::default());
                         Ok(RedisValue::ok())
@@ -112,12 +112,10 @@ impl RedisConnection {
                     Transaction::Queued(_) | Transaction::Error => {
                         Err(TransactionError::NestedMulti.into())
                     }
-                }
-            }
-            RedisCommand::Exec => {
-                return match &mut self.txn {
+                },
+                TransactionCommand::Exec => match &mut self.txn {
                     Transaction::Inactive => {
-                        Err(TransactionError::CommandWithoutMulti(command).into())
+                        Err(TransactionError::CommandWithoutMulti(txn_command).into())
                     }
                     Transaction::Queued(queue) => {
                         let command = Command::Exec(std::mem::take(queue));
@@ -128,59 +126,44 @@ impl RedisConnection {
                         self.txn = Transaction::Inactive;
                         Err(TransactionError::ExecAborted.into())
                     }
-                }
-            }
-            RedisCommand::Discard => {
-                return match self.txn {
+                },
+                TransactionCommand::Discard => match self.txn {
                     Transaction::Inactive => {
-                        Err(TransactionError::CommandWithoutMulti(command).into())
+                        Err(TransactionError::CommandWithoutMulti(txn_command).into())
                     }
                     Transaction::Queued(_) | Transaction::Error => {
                         self.txn = Transaction::Inactive;
                         Ok(RedisValue::ok())
                     }
-                }
+                },
+            },
+            RedisCommand::Connection(_) if self.txn.is_active() => {
+                Err(TransactionError::CommandInsideMulti(command).into())
             }
-            _ => (),
-        }
-
-        if command.kind() == CommandKind::Connection && self.txn.is_active() {
-            return Err(TransactionError::CommandInsideMulti(command).into());
-        }
-
-        match &mut self.txn {
-            Transaction::Inactive => (),
-            Transaction::Queued(queue) => {
-                queue.push(Query {
-                    command,
-                    args: args.to_owned(),
-                });
-                return Ok("QUEUED".into());
-            }
-            Transaction::Error => {
-                return Ok("QUEUED".into());
-            }
-        }
-
-        match command.kind() {
-            CommandKind::Write => {
-                self.shared
-                    .raft
-                    .write(Command::Single(Query {
+            _ if self.txn.is_active() => {
+                if let Transaction::Queued(queue) = &mut self.txn {
+                    queue.push(Query {
                         command,
                         args: args.to_owned(),
-                    }))
+                    });
+                }
+                Ok("QUEUED".into())
+            }
+            RedisCommand::Write(command) => {
+                self.shared
+                    .raft
+                    .write(Command::SingleWrite {
+                        command,
+                        args: args.to_owned(),
+                    })
                     .await?
             }
-            CommandKind::Read => {
+            RedisCommand::Read(command) => {
                 self.shared.raft.read().await?;
                 command.call(self.shared.store.deref(), args)
             }
-            CommandKind::Stateless => command.call(self.shared.store.deref(), args),
-            CommandKind::Connection => match command {
-                RedisCommand::Cluster => crate::command::Cluster::call(self, args).await,
-                _ => unreachable!(),
-            },
+            RedisCommand::Stateless(command) => command.call(args),
+            RedisCommand::Connection(command) => command.call(self, args).await,
         }
     }
 }

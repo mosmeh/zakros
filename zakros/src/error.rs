@@ -1,4 +1,4 @@
-use crate::command::RedisCommand;
+use crate::command::{RedisCommand, TransactionCommand};
 
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
@@ -42,7 +42,7 @@ pub enum TransactionError {
     NestedMulti,
 
     #[error("ERR {0} without MULTI")]
-    CommandWithoutMulti(RedisCommand),
+    CommandWithoutMulti(TransactionCommand),
 
     #[error("ERR {0} inside MULTI is not allowed")]
     CommandInsideMulti(RedisCommand),

@@ -1,4 +1,4 @@
-use super::{ReadCommand, WriteCommand};
+use super::{ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -9,7 +9,7 @@ use crate::{
 };
 use std::collections::hash_map::Entry;
 
-impl WriteCommand for command::Append {
+impl WriteCommandHandler for command::Append {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, value] = args else {
             return Err(Error::WrongArity);
@@ -31,7 +31,7 @@ impl WriteCommand for command::Append {
     }
 }
 
-impl ReadCommand for command::Get {
+impl ReadCommandHandler for command::Get {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
             return Err(Error::WrongArity);
@@ -44,7 +44,7 @@ impl ReadCommand for command::Get {
     }
 }
 
-impl ReadCommand for command::GetRange {
+impl ReadCommandHandler for command::GetRange {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, start, end] = args else {
             return Err(Error::WrongArity);
@@ -76,7 +76,7 @@ impl ReadCommand for command::GetRange {
     }
 }
 
-impl ReadCommand for command::MGet {
+impl ReadCommandHandler for command::MGet {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
             return Err(Error::WrongArity);
@@ -93,7 +93,7 @@ impl ReadCommand for command::MGet {
     }
 }
 
-impl WriteCommand for command::MSet {
+impl WriteCommandHandler for command::MSet {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() || args.len() % 2 != 0 {
             return Err(Error::WrongArity);
@@ -107,7 +107,7 @@ impl WriteCommand for command::MSet {
     }
 }
 
-impl WriteCommand for command::MSetNx {
+impl WriteCommandHandler for command::MSetNx {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() || args.len() % 2 != 0 {
             return Err(Error::WrongArity);
@@ -126,7 +126,7 @@ impl WriteCommand for command::MSetNx {
     }
 }
 
-impl WriteCommand for command::Set {
+impl WriteCommandHandler for command::Set {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, value, options @ ..] = args else {
             return Err(Error::WrongArity);
@@ -175,7 +175,7 @@ impl WriteCommand for command::Set {
     }
 }
 
-impl WriteCommand for command::SetRange {
+impl WriteCommandHandler for command::SetRange {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, offset, value] = args else {
             return Err(Error::WrongArity);
@@ -208,7 +208,7 @@ impl WriteCommand for command::SetRange {
     }
 }
 
-impl ReadCommand for command::StrLen {
+impl ReadCommandHandler for command::StrLen {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
             return Err(Error::WrongArity);
