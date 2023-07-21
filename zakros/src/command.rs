@@ -1,3 +1,4 @@
+mod cluster;
 mod generic;
 mod list;
 mod server;
@@ -6,12 +7,11 @@ mod string;
 use crate::{
     connection::RedisConnection,
     error::Error,
-    resp::RedisValue,
     store::{Dictionary, ReadLockable, RwLockable},
     RedisResult,
 };
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, net::SocketAddr};
+use std::fmt::Display;
 use zakros_raft::async_trait::async_trait;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +67,7 @@ macro_rules! commands {
             $($id,)*
         }
 
-        impl std::fmt::Display for $kind {
+        impl Display for $kind {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}", match self {
                     $(Self::$id => stringify!($name),)*
@@ -206,6 +206,8 @@ stateless_commands! {
 
 connecion_commands! {
     CLUSTER => Cluster,
+    READONLY => ReadOnly,
+    READWRITE => ReadWrite,
 }
 
 transaction_commands! {
@@ -229,47 +231,4 @@ trait StatelessCommandHandler {
 #[async_trait]
 trait ConnectionCommandHandler {
     async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult;
-}
-
-#[async_trait]
-impl ConnectionCommandHandler for Cluster {
-    async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult {
-        let &[subcommand, _args @ ..] = &args else {
-            return Err(Error::WrongArity);
-        };
-        match subcommand.to_ascii_uppercase().as_slice() {
-            b"MYID" => Ok(conn.shared.args.id.to_string().into_bytes().into()),
-            b"SLOTS" => {
-                const CLUSTER_SLOTS: i64 = 16384;
-                match conn.shared.raft.status().await?.leader_id {
-                    Some(leader_id) => {
-                        let mut response = vec![0.into(), (CLUSTER_SLOTS - 1).into()];
-                        let leader_index = Into::<u64>::into(leader_id) as usize;
-                        let addrs = &conn.shared.args.cluster_addrs;
-                        response.reserve(addrs.len());
-                        let addr = addrs[leader_index];
-                        fn addr_to_value(addr: SocketAddr) -> RedisValue {
-                            vec![
-                                RedisValue::BulkString(addr.ip().to_string().into_bytes()),
-                                (addr.port() as i64).into(),
-                            ]
-                            .into()
-                        }
-                        response.push(addr_to_value(addr));
-                        for (i, addr) in addrs.iter().enumerate() {
-                            if i != leader_index {
-                                response.push(addr_to_value(*addr));
-                            }
-                        }
-                        Ok(RedisValue::Array(vec![RedisValue::Array(response)]))
-                    }
-                    None => Err(Error::Raft(zakros_raft::Error::NotLeader {
-                        leader_id: None,
-                    })),
-                }
-            }
-            b"INFO" | b"NODES" => todo!(),
-            _ => Err(Error::UnknownSubcommand),
-        }
-    }
 }

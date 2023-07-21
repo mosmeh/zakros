@@ -34,6 +34,7 @@ impl Transaction {
 pub struct RedisConnection {
     pub shared: Arc<SharedState>,
     pub txn: Transaction,
+    pub is_readonly: bool,
 }
 
 impl RedisConnection {
@@ -41,6 +42,7 @@ impl RedisConnection {
         Self {
             shared,
             txn: Transaction::Inactive,
+            is_readonly: false,
         }
     }
 
@@ -159,7 +161,9 @@ impl RedisConnection {
                     .await?
             }
             RedisCommand::Read(command) => {
-                self.shared.raft.read().await?;
+                if !self.is_readonly {
+                    self.shared.raft.read().await?;
+                }
                 command.call(self.shared.store.deref(), args)
             }
             RedisCommand::Stateless(command) => command.call(args),

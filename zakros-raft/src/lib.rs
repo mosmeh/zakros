@@ -1,7 +1,7 @@
 pub mod storage;
+pub mod transport;
 
 mod server;
-pub mod transport;
 
 pub use async_trait;
 
@@ -9,7 +9,7 @@ use self::server::Server;
 use rand::{distributions::Uniform, prelude::Distribution};
 use serde::{Deserialize, Serialize};
 use server::Message;
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{fmt::Display, net::SocketAddr, sync::Arc, time::Duration};
 use storage::Storage;
 use tokio::{
     sync::{mpsc, oneshot},
@@ -136,7 +136,7 @@ pub enum State {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct NodeId(u64);
 
-impl std::fmt::Display for NodeId {
+impl Display for NodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
