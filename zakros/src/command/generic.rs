@@ -1,4 +1,4 @@
-use super::{ReadCommandHandler, WriteCommandHandler};
+use super::{ReadCommandHandler, StatelessCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -89,6 +89,13 @@ impl WriteCommandHandler for command::RenameNx {
     }
 }
 
+impl StatelessCommandHandler for command::Shutdown {
+    fn call(_: &[Vec<u8>]) -> RedisResult {
+        // TODO: gracefully shutdown
+        std::process::exit(0)
+    }
+}
+
 impl ReadCommandHandler for command::Type {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
@@ -97,6 +104,7 @@ impl ReadCommandHandler for command::Type {
         let ty = match dict.read().get(key) {
             Some(RedisObject::String(_)) => "string",
             Some(RedisObject::List(_)) => "list",
+            Some(RedisObject::Set(_)) => "set",
             None => "none",
         };
         Ok(ty.into())

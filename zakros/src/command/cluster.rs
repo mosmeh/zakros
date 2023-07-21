@@ -26,7 +26,7 @@ impl ConnectionCommandHandler for command::Cluster {
                     return Err(Error::Raft(zakros_raft::Error::NotLeader {
                         leader_id: None,
                     }));
-				};
+                };
                 let mut response = vec![0.into(), (CLUSTER_SLOTS - 1).into()];
                 let leader_index = Into::<u64>::into(leader_id) as usize;
                 let addrs = &conn.shared.args.cluster_addrs;
@@ -50,10 +50,10 @@ impl ConnectionCommandHandler for command::Cluster {
 impl ConnectionCommandHandler for command::ReadOnly {
     async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
-            Err(Error::WrongArity)
-        } else {
             conn.is_readonly = true;
             Ok(RedisValue::ok())
+        } else {
+            Err(Error::WrongArity)
         }
     }
 }
@@ -62,10 +62,10 @@ impl ConnectionCommandHandler for command::ReadOnly {
 impl ConnectionCommandHandler for command::ReadWrite {
     async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
-            Err(Error::WrongArity)
-        } else {
             conn.is_readonly = false;
             Ok(RedisValue::ok())
+        } else {
+            Err(Error::WrongArity)
         }
     }
 }

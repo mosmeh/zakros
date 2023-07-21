@@ -1,10 +1,14 @@
 use crate::error::Error;
 use bstr::ByteSlice;
-use std::{collections::VecDeque, ops::Deref};
+use std::{
+    collections::{HashSet, VecDeque},
+    ops::Deref,
+};
 
 pub enum RedisObject {
     String(Vec<u8>),
     List(VecDeque<Vec<u8>>),
+    Set(HashSet<Vec<u8>>),
 }
 
 impl From<Vec<u8>> for RedisObject {

@@ -26,7 +26,7 @@ pub enum Transaction {
 }
 
 impl Transaction {
-    fn is_active(&self) -> bool {
+    const fn is_active(&self) -> bool {
         matches!(self, Self::Queued(_) | Self::Error)
     }
 }

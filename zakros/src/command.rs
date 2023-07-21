@@ -2,6 +2,7 @@ mod cluster;
 mod generic;
 mod list;
 mod server;
+mod set;
 mod string;
 
 use crate::{
@@ -76,7 +77,7 @@ macro_rules! commands {
         }
 
         impl $kind {
-            fn parse(bytes: &[u8]) -> Option<Self> {
+            const fn parse(bytes: &[u8]) -> Option<Self> {
                 $(
                     const $name: &[u8] = stringify!($name).as_bytes();
                 )*
@@ -180,8 +181,14 @@ write_commands! {
     RPOP => RPop,
     RPUSH => RPush,
     RPUSHX => RPushX,
+    SADD => SAdd,
+    SDIFFSTORE => SDiffStore,
     SET => Set,
     SETRANGE => SetRange,
+    SINTERSTORE => SInterStore,
+    SMOVE => SMove,
+    SREM => SRem,
+    SUNIONSTORE => SUnionStore,
 }
 
 read_commands! {
@@ -194,13 +201,20 @@ read_commands! {
     LLEN => LLen,
     LRANGE => LRange,
     MGET => MGet,
+    SCARD => SCard,
+    SDIFF => SDiff,
+    SINTER => SInter,
+    SISMEMBER => SIsMember,
+    SMEMBERS => SMembers,
     STRLEN => StrLen,
+    SUNION => SUnion,
     TYPE => Type,
 }
 
 stateless_commands! {
     ECHO => Echo,
     PING => Ping,
+    SHUTDOWN => Shutdown,
     TIME => Time,
 }
 

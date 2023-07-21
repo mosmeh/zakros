@@ -54,7 +54,7 @@ impl StateMachine for Store {
                 let mut responses = Vec::with_capacity(queries.len());
                 let dict = RefCell::new(self.write());
                 for Query { command, args } in queries {
-                    let res = match command {
+                    let response = match command {
                         RedisCommand::Write(command) => command.call(&dict, &args),
                         RedisCommand::Read(command) => command.call(&dict, &args),
                         RedisCommand::Stateless(command) => command.call(&args),
@@ -62,7 +62,7 @@ impl StateMachine for Store {
                             unreachable!()
                         }
                     };
-                    responses.push(res.unwrap());
+                    responses.push(response.unwrap());
                 }
                 Ok(RedisValue::Array(responses))
             }
