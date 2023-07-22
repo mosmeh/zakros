@@ -1,4 +1,4 @@
-use super::{ReadCommandHandler, WriteCommandHandler};
+use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -8,6 +8,11 @@ use crate::{
     RedisResult,
 };
 use std::collections::{hash_map::Entry, HashMap};
+
+impl CommandSpec for command::HDel {
+    const NAME: &'static str = "HDEL";
+    const ARITY: Arity = Arity::AtLeast(2);
+}
 
 impl WriteCommandHandler for command::HDel {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
@@ -34,6 +39,11 @@ impl WriteCommandHandler for command::HDel {
     }
 }
 
+impl CommandSpec for command::HExists {
+    const NAME: &'static str = "HEXISTS";
+    const ARITY: Arity = Arity::Fixed(2);
+}
+
 impl ReadCommandHandler for command::HExists {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, field] = args else {
@@ -47,6 +57,11 @@ impl ReadCommandHandler for command::HExists {
             None => Ok(0.into()),
         }
     }
+}
+
+impl CommandSpec for command::HGet {
+    const NAME: &'static str = "HGET";
+    const ARITY: Arity = Arity::Fixed(2);
 }
 
 impl ReadCommandHandler for command::HGet {
@@ -65,6 +80,11 @@ impl ReadCommandHandler for command::HGet {
     }
 }
 
+impl CommandSpec for command::HGetAll {
+    const NAME: &'static str = "HGETALL";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
 impl ReadCommandHandler for command::HGetAll {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         read_hash(dict, args, |hash| {
@@ -78,6 +98,11 @@ impl ReadCommandHandler for command::HGetAll {
     }
 }
 
+impl CommandSpec for command::HKeys {
+    const NAME: &'static str = "HKEYS";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
 impl ReadCommandHandler for command::HKeys {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         read_hash(dict, args, |hash| {
@@ -89,10 +114,20 @@ impl ReadCommandHandler for command::HKeys {
     }
 }
 
+impl CommandSpec for command::HLen {
+    const NAME: &'static str = "HLEN";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
 impl ReadCommandHandler for command::HLen {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         read_hash(dict, args, |hash| (hash.len() as i64).into())
     }
+}
+
+impl CommandSpec for command::HMGet {
+    const NAME: &'static str = "HMGET";
+    const ARITY: Arity = Arity::AtLeast(2);
 }
 
 impl ReadCommandHandler for command::HMGet {
@@ -117,6 +152,11 @@ impl ReadCommandHandler for command::HMGet {
             None => Ok(vec![RedisValue::Null; fields.len()].into()),
         }
     }
+}
+
+impl CommandSpec for command::HSet {
+    const NAME: &'static str = "HSET";
+    const ARITY: Arity = Arity::AtLeast(3);
 }
 
 impl WriteCommandHandler for command::HSet {
@@ -153,6 +193,11 @@ impl WriteCommandHandler for command::HSet {
     }
 }
 
+impl CommandSpec for command::HSetNx {
+    const NAME: &'static str = "HSETNX";
+    const ARITY: Arity = Arity::Fixed(3);
+}
+
 impl WriteCommandHandler for command::HSetNx {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, field, value] = args else {
@@ -181,6 +226,11 @@ impl WriteCommandHandler for command::HSetNx {
         };
         Ok(if was_set { 1 } else { 0 }.into())
     }
+}
+
+impl CommandSpec for command::HVals {
+    const NAME: &'static str = "HVALS";
+    const ARITY: Arity = Arity::Fixed(1);
 }
 
 impl ReadCommandHandler for command::HVals {

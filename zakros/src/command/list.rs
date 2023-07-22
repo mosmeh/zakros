@@ -1,4 +1,4 @@
-use super::{ReadCommandHandler, WriteCommandHandler};
+use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -8,6 +8,11 @@ use crate::{
     RedisResult,
 };
 use std::collections::{hash_map::Entry, VecDeque};
+
+impl CommandSpec for command::LIndex {
+    const NAME: &'static str = "LINDEX";
+    const ARITY: Arity = Arity::Fixed(2);
+}
 
 impl ReadCommandHandler for command::LIndex {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
@@ -33,6 +38,11 @@ impl ReadCommandHandler for command::LIndex {
     }
 }
 
+impl CommandSpec for command::LLen {
+    const NAME: &'static str = "LLEN";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
 impl ReadCommandHandler for command::LLen {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
@@ -46,10 +56,20 @@ impl ReadCommandHandler for command::LLen {
     }
 }
 
+impl CommandSpec for command::LPop {
+    const NAME: &'static str = "LPOP";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
 impl WriteCommandHandler for command::LPop {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         pop(dict, args, VecDeque::pop_front)
     }
+}
+
+impl CommandSpec for command::LPush {
+    const NAME: &'static str = "LPUSH";
+    const ARITY: Arity = Arity::AtLeast(2);
 }
 
 impl WriteCommandHandler for command::LPush {
@@ -58,10 +78,20 @@ impl WriteCommandHandler for command::LPush {
     }
 }
 
+impl CommandSpec for command::LPushX {
+    const NAME: &'static str = "LPUSHX";
+    const ARITY: Arity = Arity::AtLeast(2);
+}
+
 impl WriteCommandHandler for command::LPushX {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         push::<_, _, true>(dict, args, VecDeque::push_front)
     }
+}
+
+impl CommandSpec for command::LRange {
+    const NAME: &'static str = "LRANGE";
+    const ARITY: Arity = Arity::Fixed(3);
 }
 
 impl ReadCommandHandler for command::LRange {
@@ -98,22 +128,9 @@ impl ReadCommandHandler for command::LRange {
     }
 }
 
-impl WriteCommandHandler for command::RPop {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
-        pop(dict, args, VecDeque::pop_back)
-    }
-}
-
-impl WriteCommandHandler for command::RPush {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
-        push::<_, _, false>(dict, args, VecDeque::push_back)
-    }
-}
-
-impl WriteCommandHandler for command::RPushX {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
-        push::<_, _, true>(dict, args, VecDeque::push_back)
-    }
+impl CommandSpec for command::LSet {
+    const NAME: &'static str = "LSET";
+    const ARITY: Arity = Arity::Fixed(3);
 }
 
 impl WriteCommandHandler for command::LSet {
@@ -139,6 +156,11 @@ impl WriteCommandHandler for command::LSet {
         }
         Err(Error::IndexOutOfRange)
     }
+}
+
+impl CommandSpec for command::LTrim {
+    const NAME: &'static str = "LTRIM";
+    const ARITY: Arity = Arity::Fixed(3);
 }
 
 impl WriteCommandHandler for command::LTrim {
@@ -170,6 +192,39 @@ impl WriteCommandHandler for command::LTrim {
             }
             Entry::Vacant(_) => Ok(RedisValue::ok()),
         }
+    }
+}
+
+impl CommandSpec for command::RPop {
+    const NAME: &'static str = "RPOP";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
+impl WriteCommandHandler for command::RPop {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        pop(dict, args, VecDeque::pop_back)
+    }
+}
+
+impl CommandSpec for command::RPush {
+    const NAME: &'static str = "RPUSH";
+    const ARITY: Arity = Arity::AtLeast(2);
+}
+
+impl WriteCommandHandler for command::RPush {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        push::<_, _, false>(dict, args, VecDeque::push_back)
+    }
+}
+
+impl CommandSpec for command::RPushX {
+    const NAME: &'static str = "RPUSHX";
+    const ARITY: Arity = Arity::AtLeast(2);
+}
+
+impl WriteCommandHandler for command::RPushX {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        push::<_, _, true>(dict, args, VecDeque::push_back)
     }
 }
 

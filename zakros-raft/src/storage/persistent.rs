@@ -35,7 +35,7 @@ pub struct PersistentStorage<C> {
 #[async_trait]
 impl<C> Storage for PersistentStorage<C>
 where
-    for<'de> C: Serialize + Deserialize<'de> + Clone + Send + Sync + std::fmt::Debug + 'static,
+    for<'de> C: Serialize + Deserialize<'de> + Clone + Send + Sync + 'static,
 {
     type Command = C;
     type Error = PersistentStorageError;

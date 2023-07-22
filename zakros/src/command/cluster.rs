@@ -1,7 +1,12 @@
-use super::ConnectionCommandHandler;
+use super::{Arity, CommandSpec, ConnectionCommandHandler};
 use crate::{command, connection::RedisConnection, error::Error, resp::RedisValue, RedisResult};
 use std::net::SocketAddr;
 use zakros_raft::async_trait::async_trait;
+
+impl CommandSpec for command::Cluster {
+    const NAME: &'static str = "CLUSTER";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
 
 #[async_trait]
 impl ConnectionCommandHandler for command::Cluster {
@@ -14,7 +19,7 @@ impl ConnectionCommandHandler for command::Cluster {
             .into()
         }
 
-        let &[subcommand, _args @ ..] = &args else {
+        let [subcommand, _args @ ..] = args else {
             return Err(Error::WrongArity);
         };
         match subcommand.to_ascii_uppercase().as_slice() {
@@ -46,6 +51,11 @@ impl ConnectionCommandHandler for command::Cluster {
     }
 }
 
+impl CommandSpec for command::ReadOnly {
+    const NAME: &'static str = "READONLY";
+    const ARITY: Arity = Arity::Fixed(0);
+}
+
 #[async_trait]
 impl ConnectionCommandHandler for command::ReadOnly {
     async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult {
@@ -56,6 +66,11 @@ impl ConnectionCommandHandler for command::ReadOnly {
             Err(Error::WrongArity)
         }
     }
+}
+
+impl CommandSpec for command::ReadWrite {
+    const NAME: &'static str = "READWRITE";
+    const ARITY: Arity = Arity::Fixed(0);
 }
 
 #[async_trait]

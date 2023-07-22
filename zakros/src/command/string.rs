@@ -1,4 +1,4 @@
-use super::{ReadCommandHandler, WriteCommandHandler};
+use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -8,6 +8,11 @@ use crate::{
     RedisResult,
 };
 use std::collections::hash_map::Entry;
+
+impl CommandSpec for command::Append {
+    const NAME: &'static str = "APPEND";
+    const ARITY: Arity = Arity::Fixed(2);
+}
 
 impl WriteCommandHandler for command::Append {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
@@ -31,6 +36,11 @@ impl WriteCommandHandler for command::Append {
     }
 }
 
+impl CommandSpec for command::Get {
+    const NAME: &'static str = "GET";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
 impl ReadCommandHandler for command::Get {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
@@ -42,6 +52,11 @@ impl ReadCommandHandler for command::Get {
             None => Ok(RedisValue::Null),
         }
     }
+}
+
+impl CommandSpec for command::GetRange {
+    const NAME: &'static str = "GETRANGE";
+    const ARITY: Arity = Arity::Fixed(3);
 }
 
 impl ReadCommandHandler for command::GetRange {
@@ -76,6 +91,11 @@ impl ReadCommandHandler for command::GetRange {
     }
 }
 
+impl CommandSpec for command::MGet {
+    const NAME: &'static str = "MGET";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
 impl ReadCommandHandler for command::MGet {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
@@ -93,6 +113,11 @@ impl ReadCommandHandler for command::MGet {
     }
 }
 
+impl CommandSpec for command::MSet {
+    const NAME: &'static str = "MGET";
+    const ARITY: Arity = Arity::AtLeast(2);
+}
+
 impl WriteCommandHandler for command::MSet {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() || args.len() % 2 != 0 {
@@ -105,6 +130,11 @@ impl WriteCommandHandler for command::MSet {
         }
         Ok(RedisValue::ok())
     }
+}
+
+impl CommandSpec for command::MSetNx {
+    const NAME: &'static str = "MGETNX";
+    const ARITY: Arity = Arity::AtLeast(2);
 }
 
 impl WriteCommandHandler for command::MSetNx {
@@ -124,6 +154,11 @@ impl WriteCommandHandler for command::MSetNx {
         }
         Ok(1.into())
     }
+}
+
+impl CommandSpec for command::Set {
+    const NAME: &'static str = "SET";
+    const ARITY: Arity = Arity::AtLeast(2);
 }
 
 impl WriteCommandHandler for command::Set {
@@ -175,6 +210,11 @@ impl WriteCommandHandler for command::Set {
     }
 }
 
+impl CommandSpec for command::SetRange {
+    const NAME: &'static str = "SETRANGE";
+    const ARITY: Arity = Arity::Fixed(3);
+}
+
 impl WriteCommandHandler for command::SetRange {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, offset, value] = args else {
@@ -206,6 +246,11 @@ impl WriteCommandHandler for command::SetRange {
             }
         }
     }
+}
+
+impl CommandSpec for command::StrLen {
+    const NAME: &'static str = "STRLEN";
+    const ARITY: Arity = Arity::Fixed(1);
 }
 
 impl ReadCommandHandler for command::StrLen {

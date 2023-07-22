@@ -5,6 +5,7 @@ mod list;
 mod server;
 mod set;
 mod string;
+mod transaction;
 
 use crate::{
     connection::RedisConnection,
@@ -57,13 +58,25 @@ impl RedisCommand {
         }
         Err(Error::UnknownCommand)
     }
+
+    pub const fn arity(&self) -> Arity {
+        match self {
+            Self::Write(command) => command.arity(),
+            Self::Read(command) => command.arity(),
+            Self::Stateless(command) => command.arity(),
+            Self::Connection(command) => command.arity(),
+            Self::Transaction(command) => command.arity(),
+        }
+    }
+}
+
+pub enum Arity {
+    Fixed(usize),
+    AtLeast(usize),
 }
 
 macro_rules! commands {
-    (
-        $kind:ident,
-        $($name:ident => $id:ident,)*
-    ) => {
+    ($kind:ident, $($id:ident,)*) => {
         #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
         pub enum $kind {
             $($id,)*
@@ -72,29 +85,35 @@ macro_rules! commands {
         impl Display for $kind {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}", match self {
-                    $(Self::$id => stringify!($name),)*
+                    $(Self::$id => $id::NAME,)*
                 })
             }
         }
 
         impl $kind {
+            #[allow(non_upper_case_globals)]
             const fn parse(bytes: &[u8]) -> Option<Self> {
-                $(
-                    const $name: &[u8] = stringify!($name).as_bytes();
-                )*
+                $(const $id: &[u8] = $id::NAME.as_bytes();)*
                 match bytes {
-                    $($name => Some(Self::$id),)*
+                    $($id => Some(Self::$id),)*
                     _ => None,
                 }
             }
+
+            const fn arity(&self) -> Arity {
+                match self {
+                    $(Self::$id => $id::ARITY,)*
+                }
+            }
         }
+
+        $(enum $id {})*
     }
 }
 
 macro_rules! write_commands {
-    ($($name:ident => $id:ident,)*) => {
-        commands!(WriteCommand, $($name => $id,)*);
-        $(enum $id {})*
+    ($($id:ident,)*) => {
+        commands!(WriteCommand, $($id,)*);
 
         impl WriteCommand {
             pub fn call<'a, D: RwLockable<'a, Dictionary>>(
@@ -111,9 +130,8 @@ macro_rules! write_commands {
 }
 
 macro_rules! read_commands {
-    ($($name:ident => $id:ident,)*) => {
-        commands!(ReadCommand, $($name => $id,)*);
-        $(enum $id {})*
+    ($($id:ident,)*) => {
+        commands!(ReadCommand, $($id,)*);
 
         impl ReadCommand {
             pub fn call<'a, D: ReadLockable<'a, Dictionary>>(
@@ -130,9 +148,8 @@ macro_rules! read_commands {
 }
 
 macro_rules! stateless_commands {
-    ($($name:ident => $id:ident,)*) => {
-        commands!(StatelessCommand, $($name => $id,)*);
-        $(enum $id {})*
+    ($($id:ident,)*) => {
+        commands!(StatelessCommand, $($id,)*);
 
         impl StatelessCommand {
             pub fn call(&self, args: &[Vec<u8>]) -> RedisResult {
@@ -145,9 +162,8 @@ macro_rules! stateless_commands {
 }
 
 macro_rules! connecion_commands {
-    ($($name:ident => $id:ident,)*) => {
-        commands!(ConnectionCommand, $($name => $id,)*);
-        $(enum $id {})*
+    ($($id:ident,)*) => {
+        commands!(ConnectionCommand, $($id,)*);
 
         impl ConnectionCommand {
             pub async fn call(&self, conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult {
@@ -160,100 +176,105 @@ macro_rules! connecion_commands {
 }
 
 macro_rules! transaction_commands {
-    ($($name:ident => $id:ident,)*) => {
-        commands!(TransactionCommand, $($name => $id,)*);
+    ($($id:ident,)*) => {
+        commands!(TransactionCommand, $($id,)*);
     }
 }
 
 write_commands! {
-    APPEND => Append,
-    DEL => Del,
-    FLUSHALL => FlushAll,
-    FLUSHDB => FlushDb,
-    HDEL => HDel,
-    HSET => HSet,
-    HSETNX => HSetNx,
-    LPOP => LPop,
-    LPUSH => LPush,
-    LPUSHX => LPushX,
-    LSET => LSet,
-    LTRIM => LTrim,
-    MSET => MSet,
-    MSETNX => MSetNx,
-    RENAME => Rename,
-    RENAMENX => RenameNx,
-    RPOP => RPop,
-    RPUSH => RPush,
-    RPUSHX => RPushX,
-    SADD => SAdd,
-    SDIFFSTORE => SDiffStore,
-    SET => Set,
-    SETRANGE => SetRange,
-    SINTERSTORE => SInterStore,
-    SMOVE => SMove,
-    SREM => SRem,
-    SUNIONSTORE => SUnionStore,
+    Append,
+    Del,
+    FlushAll,
+    FlushDb,
+    HDel,
+    HSet,
+    HSetNx,
+    LPop,
+    LPush,
+    LPushX,
+    LSet,
+    LTrim,
+    MSet,
+    MSetNx,
+    Rename,
+    RenameNx,
+    RPop,
+    RPush,
+    RPushX,
+    SAdd,
+    SDiffStore,
+    Set,
+    SetRange,
+    SInterStore,
+    SMove,
+    SRem,
+    SUnionStore,
 }
 
 read_commands! {
-    DBSIZE => DbSize,
-    EXISTS => Exists,
-    GET => Get,
-    GETRANGE => GetRange,
-    HEXISTS => HExists,
-    HGET => HGet,
-    HGETALL => HGetAll,
-    HKEYS => HKeys,
-    HLEN => HLen,
-    HMGET => HMGet,
-    HVALS => HVals,
-    KEYS => Keys,
-    LINDEX => LIndex,
-    LLEN => LLen,
-    LRANGE => LRange,
-    MGET => MGet,
-    SCARD => SCard,
-    SDIFF => SDiff,
-    SINTER => SInter,
-    SISMEMBER => SIsMember,
-    SMEMBERS => SMembers,
-    STRLEN => StrLen,
-    SUNION => SUnion,
-    TYPE => Type,
+    DbSize,
+    Exists,
+    Get,
+    GetRange,
+    HExists,
+    HGet,
+    HGetAll,
+    HKeys,
+    HLen,
+    HMGet,
+    HVals,
+    Keys,
+    LIndex,
+    LLen,
+    LRange,
+    MGet,
+    SCard,
+    SDiff,
+    SInter,
+    SIsMember,
+    SMembers,
+    StrLen,
+    SUnion,
+    Type,
 }
 
 stateless_commands! {
-    ECHO => Echo,
-    PING => Ping,
-    SHUTDOWN => Shutdown,
-    TIME => Time,
+    Echo,
+    Ping,
+    Shutdown,
+    Time,
 }
 
 connecion_commands! {
-    CLUSTER => Cluster,
-    READONLY => ReadOnly,
-    READWRITE => ReadWrite,
+    Cluster,
+    ReadOnly,
+    ReadWrite,
 }
 
 transaction_commands! {
-    DISCARD => Discard,
-    EXEC => Exec,
-    MULTI => Multi,
+    Discard,
+    Exec,
+    Multi,
 }
 
-trait WriteCommandHandler {
+trait CommandSpec {
+    const NAME: &'static str;
+    const ARITY: Arity;
+}
+
+trait WriteCommandHandler: CommandSpec {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult;
 }
 
-trait ReadCommandHandler {
+trait ReadCommandHandler: CommandSpec {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult;
 }
 
-trait StatelessCommandHandler {
+trait StatelessCommandHandler: CommandSpec {
     fn call(args: &[Vec<u8>]) -> RedisResult;
 }
 
 #[async_trait]
-trait ConnectionCommandHandler {
+trait ConnectionCommandHandler: CommandSpec {
     async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult;
 }

@@ -1,4 +1,4 @@
-use super::{ReadCommandHandler, StatelessCommandHandler, WriteCommandHandler};
+use super::{Arity, CommandSpec, ReadCommandHandler, StatelessCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -7,6 +7,11 @@ use crate::{
     store::{Dictionary, ReadLockable, RwLockable},
     RedisResult,
 };
+
+impl CommandSpec for command::Del {
+    const NAME: &'static str = "DEL";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
 
 impl WriteCommandHandler for command::Del {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
@@ -22,6 +27,11 @@ impl WriteCommandHandler for command::Del {
         }
         Ok(num_deleted.into())
     }
+}
+
+impl CommandSpec for command::Exists {
+    const NAME: &'static str = "EXISTS";
+    const ARITY: Arity = Arity::AtLeast(1);
 }
 
 impl ReadCommandHandler for command::Exists {
@@ -40,6 +50,11 @@ impl ReadCommandHandler for command::Exists {
     }
 }
 
+impl CommandSpec for command::Keys {
+    const NAME: &'static str = "KEYS";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
 impl ReadCommandHandler for command::Keys {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [pattern] = args else {
@@ -53,6 +68,11 @@ impl ReadCommandHandler for command::Keys {
             .collect();
         Ok(RedisValue::Array(keys))
     }
+}
+
+impl CommandSpec for command::Rename {
+    const NAME: &'static str = "RENAME";
+    const ARITY: Arity = Arity::Fixed(2);
 }
 
 impl WriteCommandHandler for command::Rename {
@@ -69,6 +89,11 @@ impl WriteCommandHandler for command::Rename {
             None => Err(Error::NoKey),
         }
     }
+}
+
+impl CommandSpec for command::RenameNx {
+    const NAME: &'static str = "RENAMENX";
+    const ARITY: Arity = Arity::Fixed(2);
 }
 
 impl WriteCommandHandler for command::RenameNx {
@@ -89,11 +114,21 @@ impl WriteCommandHandler for command::RenameNx {
     }
 }
 
+impl CommandSpec for command::Shutdown {
+    const NAME: &'static str = "SHUTDOWN";
+    const ARITY: Arity = Arity::AtLeast(0);
+}
+
 impl StatelessCommandHandler for command::Shutdown {
     fn call(_: &[Vec<u8>]) -> RedisResult {
         // TODO: gracefully shutdown
         std::process::exit(0)
     }
+}
+
+impl CommandSpec for command::Type {
+    const NAME: &'static str = "TYPE";
+    const ARITY: Arity = Arity::Fixed(1);
 }
 
 impl ReadCommandHandler for command::Type {

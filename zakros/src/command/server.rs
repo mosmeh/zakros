@@ -1,4 +1,4 @@
-use super::{ReadCommandHandler, StatelessCommandHandler, WriteCommandHandler};
+use super::{Arity, CommandSpec, ReadCommandHandler, StatelessCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -7,6 +7,11 @@ use crate::{
     RedisResult,
 };
 use std::time::{Duration, SystemTime};
+
+impl CommandSpec for command::DbSize {
+    const NAME: &'static str = "DBSIZE";
+    const ARITY: Arity = Arity::Fixed(0);
+}
 
 impl ReadCommandHandler for command::DbSize {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
@@ -18,6 +23,11 @@ impl ReadCommandHandler for command::DbSize {
     }
 }
 
+impl CommandSpec for command::Echo {
+    const NAME: &'static str = "ECHO";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
 impl StatelessCommandHandler for command::Echo {
     fn call(args: &[Vec<u8>]) -> RedisResult {
         match args {
@@ -27,16 +37,31 @@ impl StatelessCommandHandler for command::Echo {
     }
 }
 
+impl CommandSpec for command::FlushAll {
+    const NAME: &'static str = "FLUSHALL";
+    const ARITY: Arity = Arity::AtLeast(0);
+}
+
 impl WriteCommandHandler for command::FlushAll {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         flush(dict, args)
     }
 }
 
+impl CommandSpec for command::FlushDb {
+    const NAME: &'static str = "FLUSHDB";
+    const ARITY: Arity = Arity::AtLeast(0);
+}
+
 impl WriteCommandHandler for command::FlushDb {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         flush(dict, args)
     }
+}
+
+impl CommandSpec for command::Ping {
+    const NAME: &'static str = "PING";
+    const ARITY: Arity = Arity::AtLeast(0);
 }
 
 impl StatelessCommandHandler for command::Ping {
@@ -47,6 +72,11 @@ impl StatelessCommandHandler for command::Ping {
             _ => Err(Error::WrongArity),
         }
     }
+}
+
+impl CommandSpec for command::Time {
+    const NAME: &'static str = "TIME";
+    const ARITY: Arity = Arity::Fixed(0);
 }
 
 impl StatelessCommandHandler for command::Time {
@@ -65,7 +95,7 @@ impl StatelessCommandHandler for command::Time {
 }
 
 fn flush<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
-    if args.is_empty() {
+    if args.len() <= 1 {
         dict.write().clear();
         Ok(RedisValue::ok())
     } else {

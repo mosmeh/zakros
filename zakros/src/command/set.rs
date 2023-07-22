@@ -1,4 +1,4 @@
-use super::{ReadCommandHandler, WriteCommandHandler};
+use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
@@ -8,6 +8,11 @@ use crate::{
     RedisResult,
 };
 use std::collections::{hash_map::Entry, HashSet};
+
+impl CommandSpec for command::SAdd {
+    const NAME: &'static str = "SADD";
+    const ARITY: Arity = Arity::AtLeast(2);
+}
 
 impl WriteCommandHandler for command::SAdd {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
@@ -40,6 +45,11 @@ impl WriteCommandHandler for command::SAdd {
     }
 }
 
+impl CommandSpec for command::SCard {
+    const NAME: &'static str = "SCARD";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
 impl ReadCommandHandler for command::SCard {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
@@ -53,10 +63,20 @@ impl ReadCommandHandler for command::SCard {
     }
 }
 
+impl CommandSpec for command::SDiff {
+    const NAME: &'static str = "SDIFF";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
 impl ReadCommandHandler for command::SDiff {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         apply_and_return(dict, args, diff)
     }
+}
+
+impl CommandSpec for command::SDiffStore {
+    const NAME: &'static str = "SDIFFSTORE";
+    const ARITY: Arity = Arity::AtLeast(2);
 }
 
 impl WriteCommandHandler for command::SDiffStore {
@@ -65,16 +85,31 @@ impl WriteCommandHandler for command::SDiffStore {
     }
 }
 
+impl CommandSpec for command::SInter {
+    const NAME: &'static str = "SINTER";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
 impl ReadCommandHandler for command::SInter {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         apply_and_return(dict, args, intersection)
     }
 }
 
+impl CommandSpec for command::SInterStore {
+    const NAME: &'static str = "SINTERSTORE";
+    const ARITY: Arity = Arity::AtLeast(2);
+}
+
 impl WriteCommandHandler for command::SInterStore {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         apply_and_store(dict, args, intersection)
     }
+}
+
+impl CommandSpec for command::SIsMember {
+    const NAME: &'static str = "SISMEMBER";
+    const ARITY: Arity = Arity::Fixed(2);
 }
 
 impl ReadCommandHandler for command::SIsMember {
@@ -88,6 +123,11 @@ impl ReadCommandHandler for command::SIsMember {
             None => Ok(0.into()),
         }
     }
+}
+
+impl CommandSpec for command::SMembers {
+    const NAME: &'static str = "SMEMBERS";
+    const ARITY: Arity = Arity::Fixed(1);
 }
 
 impl ReadCommandHandler for command::SMembers {
@@ -105,6 +145,11 @@ impl ReadCommandHandler for command::SMembers {
             None => Ok(RedisValue::Array(Vec::new())),
         }
     }
+}
+
+impl CommandSpec for command::SMove {
+    const NAME: &'static str = "SMOVE";
+    const ARITY: Arity = Arity::Fixed(3);
 }
 
 impl WriteCommandHandler for command::SMove {
@@ -142,6 +187,11 @@ impl WriteCommandHandler for command::SMove {
     }
 }
 
+impl CommandSpec for command::SRem {
+    const NAME: &'static str = "SREM";
+    const ARITY: Arity = Arity::AtLeast(2);
+}
+
 impl WriteCommandHandler for command::SRem {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let (key, members) = match args {
@@ -167,10 +217,20 @@ impl WriteCommandHandler for command::SRem {
     }
 }
 
+impl CommandSpec for command::SUnion {
+    const NAME: &'static str = "SUNION";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
 impl ReadCommandHandler for command::SUnion {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         apply_and_return(dict, args, union)
     }
+}
+
+impl CommandSpec for command::SUnionStore {
+    const NAME: &'static str = "SUNIONSTORE";
+    const ARITY: Arity = Arity::AtLeast(2);
 }
 
 impl WriteCommandHandler for command::SUnionStore {

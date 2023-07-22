@@ -1,5 +1,5 @@
 use crate::{
-    command::{RedisCommand, TransactionCommand},
+    command::{Arity, RedisCommand, TransactionCommand},
     error::{Error, TransactionError},
     resp::{QueryDecoder, RedisValue, ResponseEncoder},
     store::{Command, Query},
@@ -99,7 +99,11 @@ impl RedisConnection {
 
     async fn handle_command(&mut self, command: &[u8], args: &[Vec<u8>]) -> RedisResult {
         let command = RedisCommand::parse(command)?;
-        // TODO: check arity
+        match command.arity() {
+            Arity::Fixed(n) if args.len() == n => (),
+            Arity::AtLeast(n) if args.len() >= n => (),
+            _ => return Err(Error::WrongArity),
+        }
 
         match command {
             RedisCommand::Transaction(txn_command) => match txn_command {
