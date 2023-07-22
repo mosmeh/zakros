@@ -2,7 +2,7 @@ use super::Storage;
 use crate::{Entry, Metadata};
 use async_trait::async_trait;
 use bincode::Options;
-use byteorder::{NativeEndian, WriteBytesExt};
+use byteorder::{WriteBytesExt, LE};
 use bytes::{Buf, BufMut, BytesMut};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -45,7 +45,7 @@ where
             Ok(mut file) => {
                 let mut bytes = Vec::new();
                 file.read_to_end(&mut bytes).await?;
-                Ok(bincode_options().deserialize(&bytes).unwrap())
+                Ok(bincode::DefaultOptions::new().deserialize(&bytes)?)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Metadata::default()),
             Err(e) => Err(e.into()),
@@ -87,7 +87,7 @@ where
         let mut reader = FramedRead::new(self.file_mut(), EntryDecoder::default());
         let mut entries = Vec::new();
         while let Some(entry) = reader.next().await {
-            entries.push(entry.unwrap());
+            entries.push(entry?);
         }
         Ok(entries)
     }
@@ -98,7 +98,7 @@ where
     ) -> Result<(), Self::Error> {
         self.file_mut().seek(std::io::SeekFrom::End(0)).await?;
         for entry in entries {
-            let size = bincode_options().serialized_size(entry)?;
+            let size = bincode::DefaultOptions::new().serialized_size(entry)?;
             let offset = self.current_offset;
             self.writer.feed(EncoderItem { inner: entry, size }).await?;
             self.current_offset += size + HEADER_SIZE as u64;
@@ -121,7 +121,7 @@ where
     }
 
     async fn persist_metadata(&mut self, metadata: &Metadata) -> Result<(), Self::Error> {
-        let bytes = bincode_options().serialize(metadata)?;
+        let bytes = bincode::DefaultOptions::new().serialize(metadata)?;
         let tmp_filename = self.dir.join("metadata.tmp");
         {
             let mut tmp_file = File::create(&tmp_filename).await?;
@@ -156,7 +156,7 @@ impl<C> PersistentStorage<C> {
         let mut current_offset = 0;
         while let Some(offset) = reader.next().await {
             offsets.push(current_offset);
-            current_offset += offset.unwrap() + HEADER_SIZE as u64;
+            current_offset += offset? + HEADER_SIZE as u64;
         }
         let writer = FramedWrite::new(file, EntryEncoder::default());
         Ok(Self {
@@ -203,10 +203,8 @@ where
 
     fn encode(&mut self, item: EncoderItem<'_, I>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut writer = dst.writer();
-        writer.write_u64::<NativeEndian>(item.size).unwrap();
-        bincode_options()
-            .serialize_into(writer, item.inner)
-            .unwrap();
+        writer.write_u64::<LE>(item.size)?;
+        bincode::DefaultOptions::new().serialize_into(writer, item.inner)?;
         Ok(())
     }
 }
@@ -234,12 +232,8 @@ where
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         self.inner
-            .decode(src, |s| bincode_options().deserialize_from(s))
+            .decode(src, |s| bincode::DefaultOptions::new().deserialize_from(s))
     }
-}
-
-fn bincode_options() -> impl Options {
-    bincode::DefaultOptions::default().with_native_endian()
 }
 
 #[derive(Default)]
@@ -272,7 +266,7 @@ impl InnerDecoder {
                 if src.len() < HEADER_SIZE {
                     return Ok(None);
                 }
-                src.get_u64_ne() as usize
+                src.get_u64_le() as usize
             }
         };
         if src.len() < size {

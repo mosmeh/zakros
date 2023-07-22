@@ -1,7 +1,7 @@
 use crate::error::Error;
 use bstr::ByteSlice;
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     ops::Deref,
 };
 
@@ -9,6 +9,7 @@ pub enum RedisObject {
     String(Vec<u8>),
     List(VecDeque<Vec<u8>>),
     Set(HashSet<Vec<u8>>),
+    Hash(HashMap<Vec<u8>, Vec<u8>>),
 }
 
 impl From<Vec<u8>> for RedisObject {
@@ -17,13 +18,13 @@ impl From<Vec<u8>> for RedisObject {
     }
 }
 
-pub trait ArgExt {
+pub trait BytesExt {
     fn to_i64(&self) -> Result<i64, Error>;
     fn to_i32(&self) -> Result<i32, Error>;
     fn to_u32(&self) -> Result<u32, Error>;
 }
 
-impl<T: Deref<Target = [u8]>> ArgExt for T {
+impl<T: Deref<Target = [u8]>> BytesExt for T {
     fn to_i64(&self) -> Result<i64, Error> {
         self.to_str()
             .map_err(|_| Error::NotInteger)?

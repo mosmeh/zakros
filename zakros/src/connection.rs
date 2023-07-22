@@ -56,9 +56,6 @@ impl RedisConnection {
                     let Some((command, args)) = strings.split_first() else {
                         continue;
                     };
-                    if command.eq_ignore_ascii_case(b"QUIT") {
-                        return Ok(());
-                    }
                     let value = self.handle_query(command, args).await.unwrap();
                     writer.send(value).await?;
                 }

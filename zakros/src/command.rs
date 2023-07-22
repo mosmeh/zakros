@@ -1,5 +1,6 @@
 mod cluster;
 mod generic;
+mod hash;
 mod list;
 mod server;
 mod set;
@@ -169,6 +170,9 @@ write_commands! {
     DEL => Del,
     FLUSHALL => FlushAll,
     FLUSHDB => FlushDb,
+    HDEL => HDel,
+    HSET => HSet,
+    HSETNX => HSetNx,
     LPOP => LPop,
     LPUSH => LPush,
     LPUSHX => LPushX,
@@ -196,6 +200,13 @@ read_commands! {
     EXISTS => Exists,
     GET => Get,
     GETRANGE => GetRange,
+    HEXISTS => HExists,
+    HGET => HGet,
+    HGETALL => HGetAll,
+    HKEYS => HKeys,
+    HLEN => HLen,
+    HMGET => HMGet,
+    HVALS => HVals,
     KEYS => Keys,
     LINDEX => LIndex,
     LLEN => LLen,

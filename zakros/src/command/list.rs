@@ -2,7 +2,7 @@ use super::{ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
-    object::{ArgExt, RedisObject},
+    object::{BytesExt, RedisObject},
     resp::RedisValue,
     store::{Dictionary, ReadLockable, RwLockable},
     RedisResult,

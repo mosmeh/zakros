@@ -105,6 +105,7 @@ impl ReadCommandHandler for command::Type {
             Some(RedisObject::String(_)) => "string",
             Some(RedisObject::List(_)) => "list",
             Some(RedisObject::Set(_)) => "set",
+            Some(RedisObject::Hash(_)) => "hash",
             None => "none",
         };
         Ok(ty.into())
