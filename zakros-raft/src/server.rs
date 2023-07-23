@@ -3,7 +3,7 @@ use crate::{
     transport::{
         AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport,
     },
-    Config, Entry, EntryKind, Error, Metadata, Node, NodeId, State, StateMachine, Status,
+    Command, Config, Entry, EntryKind, Error, Metadata, Node, NodeId, State, StateMachine, Status,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
 use std::{
@@ -16,9 +16,9 @@ use tokio::{
     time::Instant,
 };
 
-pub struct Server<C, O, M, S, T>
+pub struct Server<C, M, S, T>
 where
-    C: Send + Sync + Clone + 'static,
+    C: Command,
     T: Transport<Command = C>,
 {
     node_id: NodeId,
@@ -51,9 +51,9 @@ where
     leader_id: Option<NodeId>,
     election_deadline: Instant,
 
-    rx: mpsc::UnboundedReceiver<Message<C, O>>,
+    rx: mpsc::UnboundedReceiver<Message<C>>,
 
-    pending_write_requests: VecDeque<WriteRequest<O>>,
+    pending_write_requests: VecDeque<WriteRequest<C::Output>>,
     pending_read_requests: VecDeque<ReadRequest>,
 
     pending_append_entries_responses:
@@ -62,10 +62,10 @@ where
         FuturesUnordered<JoinHandle<Response<RequestVoteResponse, T::Error>>>,
 }
 
-impl<C, O, M, S, T> Server<C, O, M, S, T>
+impl<C, M, S, T> Server<C, M, S, T>
 where
-    C: Send + Sync + Clone + 'static,
-    M: StateMachine<Command = C, Output = O>,
+    C: Command,
+    M: StateMachine<Command = C>,
     S: Storage<Command = C>,
     T: Transport<Command = C>,
 {
@@ -76,14 +76,8 @@ where
         state_machine: M,
         mut storage: S,
         transport: Arc<T>,
-        rx: mpsc::UnboundedReceiver<Message<C, O>>,
-    ) -> Self
-    where
-        C: Send + Sync + Clone + 'static,
-        M: StateMachine<Command = C, Output = O>,
-        S: Storage<Command = C>,
-        T: Transport<Command = C>,
-    {
+        rx: mpsc::UnboundedReceiver<Message<C>>,
+    ) -> Self {
         let election_deadline = config.random_election_deadline();
         let Metadata {
             current_term,
@@ -145,7 +139,7 @@ where
         }
     }
 
-    async fn handle_message(&mut self, message: Message<C, O>) {
+    async fn handle_message(&mut self, message: Message<C>) {
         match message {
             Message::AppendEntries(request, tx) => {
                 let _ = tx.send(self.handle_append_entries(request).await);
@@ -278,11 +272,11 @@ where
         let response = match result {
             Ok(response) => response,
             Err(err) => {
-                tracing::trace!("AppendEntries request to {} failed: {:?}", node_id, err);
+                tracing::trace!("AppendEntries request to {:?} failed: {:?}", node_id, err);
                 return;
             }
         };
-        tracing::trace!("received AppendEntries reply from {}", node_id);
+        tracing::trace!("received AppendEntries reply from {:?}", node_id);
 
         if self.state != State::Leader {
             return;
@@ -351,7 +345,7 @@ where
             None => (),
             Some(node_id) if node_id == candidate_id => (),
             Some(node_id) => {
-                tracing::trace!("rejecting RequestVote: already voted for {}", node_id);
+                tracing::trace!("rejecting RequestVote: already voted for {:?}", node_id);
                 return RequestVoteResponse {
                     term: self.current_term,
                     vote_granted: false,
@@ -373,7 +367,7 @@ where
         self.vote_for(candidate_id).await;
         self.reset_election_timer();
 
-        tracing::trace!("voting to {}", candidate_id);
+        tracing::trace!("voting to {:?}", candidate_id);
         RequestVoteResponse {
             term: self.current_term,
             vote_granted: true,
@@ -388,11 +382,11 @@ where
         let response = match result {
             Ok(response) => response,
             Err(err) => {
-                tracing::trace!("RequestVote request to {} failed: {:?}", node_id, err);
+                tracing::trace!("RequestVote request to {:?} failed: {:?}", node_id, err);
                 return;
             }
         };
-        tracing::trace!("received RequestVote response from {}", node_id);
+        tracing::trace!("received RequestVote response from {:?}", node_id);
 
         // If RPC request or response contains term T > currentTerm:
         // set currentTerm = T, convert to follower (S5.1)
@@ -415,7 +409,7 @@ where
         }
     }
 
-    async fn handle_write(&mut self, command: C, tx: oneshot::Sender<Result<O, Error>>) {
+    async fn handle_write(&mut self, command: C, tx: oneshot::Sender<Result<C::Output, Error>>) {
         if self.state != State::Leader {
             tracing::trace!("rejecting write request");
             let _ = tx.send(Err(Error::NotLeader {
@@ -677,7 +671,7 @@ where
         {
             let transport = self.transport.clone();
             let request = request.clone();
-            tracing::trace!("sending RequestVote to {}", node_id);
+            tracing::trace!("sending RequestVote to {:?}", node_id);
             self.pending_request_vote_responses
                 .push(tokio::spawn(async move {
                     Response {
@@ -691,6 +685,7 @@ where
     async fn become_leader(&mut self) {
         tracing::info!(term = self.current_term, "became leader");
         self.state = State::Leader;
+        self.leader_id = Some(self.node_id);
 
         self.storage
             .append_entries(&[Entry {
@@ -743,7 +738,7 @@ where
         };
         let transport = self.transport.clone();
         tracing::trace!(
-            "sending AppendEntries with {} entries to {}",
+            "sending AppendEntries with {} entries to {:?}",
             num_entries,
             dest
         );
@@ -756,10 +751,10 @@ where
     }
 }
 
-pub enum Message<C, O> {
+pub enum Message<C: Command> {
     AppendEntries(AppendEntries<C>, oneshot::Sender<AppendEntriesResponse>),
     RequestVote(RequestVote, oneshot::Sender<RequestVoteResponse>),
-    Write(C, oneshot::Sender<Result<O, Error>>),
+    Write(C, oneshot::Sender<Result<C::Output, Error>>),
     Read(oneshot::Sender<Result<(), Error>>),
     Status(oneshot::Sender<Status>),
 }

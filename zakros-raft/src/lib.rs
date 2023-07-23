@@ -9,7 +9,7 @@ use self::server::Server;
 use rand::{distributions::Uniform, prelude::Distribution};
 use serde::{Deserialize, Serialize};
 use server::Message;
-use std::{fmt::Display, net::SocketAddr, sync::Arc, time::Duration};
+use std::{fmt::Debug, net::SocketAddr, sync::Arc, time::Duration};
 use storage::Storage;
 use tokio::{
     sync::{mpsc, oneshot},
@@ -20,15 +20,11 @@ use transport::{
 };
 
 #[derive(Clone)]
-pub struct Raft<C, O> {
-    tx: mpsc::UnboundedSender<Message<C, O>>,
+pub struct Raft<C: Command> {
+    tx: mpsc::UnboundedSender<Message<C>>,
 }
 
-impl<C, O> Raft<C, O>
-where
-    C: Send + Sync + Clone + 'static,
-    O: Send + 'static,
-{
+impl<C: Command> Raft<C> {
     pub fn spawn<M, S, T>(
         id: NodeId,
         nodes: Vec<NodeId>,
@@ -38,7 +34,7 @@ where
         transport: Arc<T>,
     ) -> Self
     where
-        M: StateMachine<Command = C, Output = O>,
+        M: StateMachine<Command = C>,
         S: Storage<Command = C>,
         T: Transport<Command = C>,
     {
@@ -52,7 +48,7 @@ where
         Self { tx }
     }
 
-    pub async fn write(&self, command: C) -> Result<O, Error> {
+    pub async fn write(&self, command: C) -> Result<C::Output, Error> {
         let (tx, rx) = oneshot::channel();
         self.tx
             .send(Message::Write(command, tx))
@@ -136,12 +132,6 @@ pub enum State {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct NodeId(u64);
 
-impl Display for NodeId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 impl From<u64> for NodeId {
     fn from(id: u64) -> Self {
         Self(id)
@@ -215,10 +205,13 @@ pub enum Error {
     NotLeader { leader_id: Option<NodeId> },
 }
 
+pub trait Command: Send + Sync + Clone + 'static {
+    type Output: Send;
+}
+
 #[async_trait::async_trait]
 pub trait StateMachine: Send + Sync + 'static {
-    type Command: Send;
-    type Output;
+    type Command: Command;
 
-    async fn apply(&mut self, command: Self::Command) -> Self::Output;
+    async fn apply(&mut self, command: Self::Command) -> <Self::Command as Command>::Output;
 }

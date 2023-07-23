@@ -99,7 +99,7 @@ async fn serve(args: Args) -> anyhow::Result<()> {
 
 pub struct SharedState {
     args: Args,
-    raft: Raft<Command, RedisResult>,
+    raft: Raft<Command>,
     store: Store,
 }
 
@@ -113,7 +113,7 @@ impl SharedState {
                 .collect(),
             Config::default(),
             store.clone(),
-            PersistentStorage::new(args.dir.join(node_id.to_string()))
+            PersistentStorage::new(args.dir.join(Into::<u64>::into(node_id).to_string()))
                 .await
                 .unwrap(),
             Arc::new(RpcHandler(args.clone())),

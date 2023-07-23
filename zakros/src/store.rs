@@ -42,12 +42,15 @@ pub enum Command {
     Exec(Vec<Query>),
 }
 
+impl zakros_raft::Command for Command {
+    type Output = RedisResult;
+}
+
 #[async_trait]
 impl StateMachine for Store {
     type Command = Command;
-    type Output = RedisResult;
 
-    async fn apply(&mut self, command: Self::Command) -> Self::Output {
+    async fn apply(&mut self, command: Command) -> RedisResult {
         match command {
             Command::SingleWrite { command, args } => command.call(self.deref().deref(), &args),
             Command::Exec(queries) => {
