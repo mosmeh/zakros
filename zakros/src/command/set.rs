@@ -118,7 +118,7 @@ impl ReadCommandHandler for command::SIsMember {
             return Err(Error::WrongArity);
         };
         match dict.read().get(key) {
-            Some(RedisObject::Set(set)) => Ok((if set.contains(member) { 1 } else { 0 }).into()),
+            Some(RedisObject::Set(set)) => Ok((set.contains(member) as i64).into()),
             Some(_) => Err(Error::WrongType),
             None => Ok(0.into()),
         }

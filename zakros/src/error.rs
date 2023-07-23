@@ -34,6 +34,9 @@ pub enum Error {
 
     #[error(transparent)]
     Transaction(#[from] TransactionError),
+
+    #[error("{0}")]
+    Custom(String),
 }
 
 #[derive(thiserror::Error, Debug, Clone)]

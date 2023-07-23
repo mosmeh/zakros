@@ -50,9 +50,7 @@ impl ReadCommandHandler for command::HExists {
             return Err(Error::WrongArity);
         };
         match dict.read().get(key) {
-            Some(RedisObject::Hash(hash)) => {
-                Ok(if hash.contains_key(field) { 1 } else { 0 }.into())
-            }
+            Some(RedisObject::Hash(hash)) => Ok((hash.contains_key(field) as i64).into()),
             Some(_) => Err(Error::WrongType),
             None => Ok(0.into()),
         }
@@ -224,7 +222,7 @@ impl WriteCommandHandler for command::HSetNx {
                 true
             }
         };
-        Ok(if was_set { 1 } else { 0 }.into())
+        Ok((was_set as i64).into())
     }
 }
 

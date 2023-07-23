@@ -1,3 +1,4 @@
+mod bitops;
 mod cluster;
 mod generic;
 mod hash;
@@ -183,6 +184,7 @@ macro_rules! transaction_commands {
 
 write_commands! {
     Append,
+    BitOp,
     Del,
     FlushAll,
     FlushDb,
@@ -204,6 +206,7 @@ write_commands! {
     SAdd,
     SDiffStore,
     Set,
+    SetBit,
     SetRange,
     SInterStore,
     SMove,
@@ -212,9 +215,11 @@ write_commands! {
 }
 
 read_commands! {
+    BitCount,
     DbSize,
     Exists,
     Get,
+    GetBit,
     GetRange,
     HExists,
     HGet,
