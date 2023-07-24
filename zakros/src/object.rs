@@ -19,12 +19,19 @@ impl From<Vec<u8>> for RedisObject {
 }
 
 pub trait BytesExt {
-    fn to_i64(&self) -> Result<i64, Error>;
     fn to_i32(&self) -> Result<i32, Error>;
-    fn to_u32(&self) -> Result<u32, Error>;
+    fn to_i64(&self) -> Result<i64, Error>;
+    fn to_u64(&self) -> Result<u64, Error>;
 }
 
 impl<T: Deref<Target = [u8]>> BytesExt for T {
+    fn to_i32(&self) -> Result<i32, Error> {
+        self.to_str()
+            .map_err(|_| Error::ValueOutOfRange)?
+            .parse()
+            .map_err(|_| Error::ValueOutOfRange)
+    }
+
     fn to_i64(&self) -> Result<i64, Error> {
         self.to_str()
             .map_err(|_| Error::NotInteger)?
@@ -32,14 +39,7 @@ impl<T: Deref<Target = [u8]>> BytesExt for T {
             .map_err(|_| Error::NotInteger)
     }
 
-    fn to_i32(&self) -> Result<i32, Error> {
-        self.to_str()
-            .map_err(|_| Error::NotInteger)?
-            .parse()
-            .map_err(|_| Error::NotInteger)
-    }
-
-    fn to_u32(&self) -> Result<u32, Error> {
+    fn to_u64(&self) -> Result<u64, Error> {
         self.to_str()
             .map_err(|_| Error::ValueOutOfRange)?
             .parse()

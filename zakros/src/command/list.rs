@@ -25,9 +25,9 @@ impl ReadCommandHandler for command::LIndex {
             Some(_) => return Err(Error::WrongType),
             None => return Ok(RedisValue::Null),
         };
-        let mut index = index.to_i32()?;
+        let mut index = index.to_i64()?;
         if index < 0 {
-            index += list.len() as i32;
+            index += list.len() as i64;
         }
         if let Ok(index) = index.try_into() {
             if let Some(element) = list.get(index) {
@@ -99,15 +99,15 @@ impl ReadCommandHandler for command::LRange {
         let [key, start, stop] = args else {
             return Err(Error::WrongArity);
         };
-        let mut start = start.to_i32()?;
-        let mut stop = stop.to_i32()?;
+        let mut start = start.to_i64()?;
+        let mut stop = stop.to_i64()?;
         let dict = dict.read();
         let list = match dict.get(key) {
             Some(RedisObject::List(list)) => list,
             Some(_) => return Err(Error::WrongType),
             None => return Ok(RedisValue::Null),
         };
-        let len = list.len() as i32;
+        let len = list.len() as i64;
         if start < 0 {
             start = (start + len).max(0);
         }
@@ -144,9 +144,9 @@ impl WriteCommandHandler for command::LSet {
             Some(_) => return Err(Error::WrongType),
             None => return Err(Error::NoKey),
         };
-        let mut index = index.to_i32()?;
+        let mut index = index.to_i64()?;
         if index < 0 {
-            index += list.len() as i32;
+            index += list.len() as i64;
         }
         if let Ok(index) = index.try_into() {
             if let Some(e) = list.get_mut(index) {
@@ -168,14 +168,14 @@ impl WriteCommandHandler for command::LTrim {
         let [key, start, stop] = args else {
             return Err(Error::WrongArity);
         };
-        let mut start = start.to_i32()?;
-        let mut stop = stop.to_i32()?;
+        let mut start = start.to_i64()?;
+        let mut stop = stop.to_i64()?;
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let RedisObject::List(list) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
-                let len = list.len() as i32;
+                let len = list.len() as i64;
                 if start < 0 {
                     start = (start + len).max(0);
                 }
@@ -286,7 +286,7 @@ where
             Entry::Vacant(_) => Ok(RedisValue::Null),
         },
         [key, count] => {
-            let count = count.to_u32()?;
+            let count = count.to_u64()?;
             match dict.write().entry(key.clone()) {
                 Entry::Occupied(mut entry) => {
                     let RedisObject::List(list) = entry.get_mut() else {

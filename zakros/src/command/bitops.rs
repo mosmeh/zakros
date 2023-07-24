@@ -167,7 +167,7 @@ impl ReadCommandHandler for command::GetBit {
         let [key, offset] = args else {
             return Err(Error::WrongArity);
         };
-        let offset = offset.to_u32()?;
+        let offset = offset.to_u64()?;
         let dict = dict.read();
         let s = match dict.get(key) {
             Some(RedisObject::String(s)) => s,
@@ -193,8 +193,8 @@ impl WriteCommandHandler for command::SetBit {
         let [key, offset, value] = args else {
             return Err(Error::WrongArity);
         };
-        let offset = offset.to_u32()?;
-        let value = value.to_i32()?;
+        let offset = offset.to_u64()?;
+        let value = value.to_i64()?;
         if value != 0 && value != 1 {
             return Err(Error::ValueOutOfRange);
         }

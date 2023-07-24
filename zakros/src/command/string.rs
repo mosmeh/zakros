@@ -225,7 +225,7 @@ impl WriteCommandHandler for command::SetRange {
             return Err(Error::WrongArity);
         };
         let offset = offset
-            .to_i32()?
+            .to_i64()?
             .try_into()
             .map_err(|_| Error::ValueOutOfRange)?;
         match dict.write().entry(key.clone()) {

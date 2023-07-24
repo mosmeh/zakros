@@ -246,7 +246,9 @@ read_commands! {
 
 stateless_commands! {
     Echo,
+    Move,
     Ping,
+    Select,
     Shutdown,
     Time,
 }

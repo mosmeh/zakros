@@ -2,7 +2,7 @@ use super::{Arity, CommandSpec, ReadCommandHandler, StatelessCommandHandler, Wri
 use crate::{
     command,
     error::Error,
-    object::RedisObject,
+    object::{BytesExt, RedisObject},
     resp::RedisValue,
     store::{Dictionary, ReadLockable, RwLockable},
     RedisResult,
@@ -47,6 +47,19 @@ impl ReadCommandHandler for command::Exists {
             }
         }
         Ok(num_exists.into())
+    }
+}
+
+impl CommandSpec for command::Move {
+    const NAME: &'static str = "MOVE";
+    const ARITY: Arity = Arity::Fixed(2);
+}
+
+impl StatelessCommandHandler for command::Move {
+    fn call(_: &[Vec<u8>]) -> RedisResult {
+        Err(Error::Custom(
+            "ERR MOVE is not allowed in cluster mode".to_owned(),
+        ))
     }
 }
 
@@ -111,6 +124,26 @@ impl WriteCommandHandler for command::RenameNx {
         let value = dict.remove(key).unwrap();
         dict.insert(new_key.clone(), value);
         Ok(1.into())
+    }
+}
+
+impl CommandSpec for command::Select {
+    const NAME: &'static str = "SELECT";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
+impl StatelessCommandHandler for command::Select {
+    fn call(args: &[Vec<u8>]) -> RedisResult {
+        let [index] = args else {
+            return Err(Error::WrongArity);
+        };
+        if index.to_i32()? == 0 {
+            Ok(RedisValue::ok())
+        } else {
+            Err(Error::Custom(
+                "ERR SELECT is not allowed in cluster mode".to_owned(),
+            ))
+        }
     }
 }
 
