@@ -227,6 +227,7 @@ read_commands! {
     HKeys,
     HLen,
     HMGet,
+    HStrLen,
     HVals,
     Keys,
     LIndex,

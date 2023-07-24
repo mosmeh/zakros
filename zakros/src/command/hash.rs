@@ -152,6 +152,27 @@ impl ReadCommandHandler for command::HMGet {
     }
 }
 
+impl CommandSpec for command::HStrLen {
+    const NAME: &'static str = "HSTRLEN";
+    const ARITY: Arity = Arity::Fixed(2);
+}
+
+impl ReadCommandHandler for command::HStrLen {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        let [key, field] = args else {
+            return Err(Error::WrongArity);
+        };
+        match dict.read().get(key) {
+            Some(RedisObject::Hash(hash)) => match hash.get(field) {
+                Some(value) => Ok((value.len() as i64).into()),
+                None => Ok(0.into()),
+            },
+            Some(_) => Err(Error::WrongType),
+            None => Ok(0.into()),
+        }
+    }
+}
+
 impl CommandSpec for command::HSet {
     const NAME: &'static str = "HSET";
     const ARITY: Arity = Arity::AtLeast(3);

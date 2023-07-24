@@ -106,7 +106,7 @@ impl WriteCommandHandler for command::BitOp {
         };
         if op == BitOp::Not && keys.len() != 1 {
             return Err(Error::Custom(
-                "BITOP NOT must be called with a single source key.".to_owned(),
+                "ERR BITOP NOT must be called with a single source key.".to_owned(),
             ));
         }
         let mut sources = Vec::with_capacity(keys.len());
