@@ -64,12 +64,12 @@ impl Decoder for QueryDecoder {
             Some(end) if end + 1 < bytes.len() => end, // if there is a room for trailing \n
             _ => return Ok(None),
         };
-        // expect array
-        let [b'*', len_bytes @ ..] = &bytes[..end] else {
-            return Err(ConnectionError::Protocol);
+        let len: i64 = match &bytes[..end] {
+            [] => 0,                                           // empty
+            [b'*', len_bytes @ ..] => parse_bytes(len_bytes)?, // array
+            _ => return Err(ConnectionError::Protocol),
         };
         bytes = &bytes[end + 2..]; // 2 for skipping \r\n
-        let len: i64 = parse_bytes(len_bytes)?;
         if len <= 0 {
             src.advance(src.len() - bytes.len()); // `bytes` has unconsumed bytes
             return Ok(Some(Vec::new()));

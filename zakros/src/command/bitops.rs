@@ -126,6 +126,10 @@ impl WriteCommandHandler for command::BitOp {
             dict.remove(dest_key);
             return Ok(0.into());
         }
+        if op == BitOp::And && sources.len() < keys.len() {
+            dict.insert(dest_key.clone(), vec![0; max_len].into());
+            return Ok((max_len as i64).into());
+        }
         let Some((first, rest)) = sources.split_first_mut() else {
             dict.remove(dest_key);
             return Ok(0.into());
@@ -140,18 +144,8 @@ impl WriteCommandHandler for command::BitOp {
             for iter in &mut *rest {
                 let source_byte = iter.next().copied().unwrap_or(0);
                 match op {
-                    BitOp::And => {
-                        dest_byte &= source_byte;
-                        if dest_byte == 0 {
-                            break;
-                        }
-                    }
-                    BitOp::Or => {
-                        dest_byte |= source_byte;
-                        if dest_byte == u8::MAX {
-                            break;
-                        }
-                    }
+                    BitOp::And => dest_byte &= source_byte,
+                    BitOp::Or => dest_byte |= source_byte,
                     BitOp::Xor => dest_byte ^= source_byte,
                     BitOp::Not => unreachable!(),
                 }

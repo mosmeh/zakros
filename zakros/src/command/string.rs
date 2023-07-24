@@ -114,7 +114,7 @@ impl ReadCommandHandler for command::MGet {
 }
 
 impl CommandSpec for command::MSet {
-    const NAME: &'static str = "MGET";
+    const NAME: &'static str = "MSET";
     const ARITY: Arity = Arity::AtLeast(2);
 }
 
@@ -133,7 +133,7 @@ impl WriteCommandHandler for command::MSet {
 }
 
 impl CommandSpec for command::MSetNx {
-    const NAME: &'static str = "MGETNX";
+    const NAME: &'static str = "MSETNX";
     const ARITY: Arity = Arity::AtLeast(2);
 }
 
@@ -183,24 +183,28 @@ impl WriteCommandHandler for command::Set {
         let value = value.clone().into();
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
-                let response = if get {
+                if get {
                     let RedisObject::String(s) = entry.get() else {
                         return Err(Error::WrongType);
                     };
-                    s.clone().into()
-                } else {
-                    RedisValue::ok()
-                };
-                if !nx {
-                    entry.insert(value);
+                    let original_value = s.clone();
+                    if !nx {
+                        entry.insert(value);
+                    }
+                    return Ok(original_value.into());
                 }
-                Ok(response)
+                Ok(if !nx {
+                    entry.insert(value);
+                    RedisValue::ok()
+                } else {
+                    RedisValue::Null
+                })
             }
             Entry::Vacant(entry) => {
                 if !xx {
                     entry.insert(value);
                 }
-                Ok(if get {
+                Ok(if get || xx {
                     RedisValue::Null
                 } else {
                     RedisValue::ok()
