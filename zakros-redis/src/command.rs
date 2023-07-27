@@ -9,14 +9,12 @@ mod string;
 mod transaction;
 
 use crate::{
-    connection::RedisConnection,
     error::Error,
-    store::{Dictionary, ReadLockable, RwLockable},
-    RedisResult,
+    lockable::{ReadLockable, RwLockable},
+    Dictionary, RedisResult,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use zakros_raft::async_trait::async_trait;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RedisCommand {
@@ -24,7 +22,6 @@ pub enum RedisCommand {
     Read(ReadCommand),
     Stateless(StatelessCommand),
     Connection(ConnectionCommand),
-    Transaction(TransactionCommand),
 }
 
 impl Display for RedisCommand {
@@ -34,46 +31,60 @@ impl Display for RedisCommand {
             Self::Read(command) => write!(f, "{}", command),
             Self::Stateless(command) => write!(f, "{}", command),
             Self::Connection(command) => write!(f, "{}", command),
-            Self::Transaction(command) => write!(f, "{}", command),
         }
     }
 }
 
-impl RedisCommand {
-    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let bytes = &bytes.to_ascii_uppercase();
+pub(crate) enum Arity {
+    Fixed(usize),
+    AtLeast(usize),
+}
+
+pub(crate) enum ParsedCommand {
+    Normal(RedisCommand),
+    Transaction(TransactionCommand),
+}
+
+impl From<RedisCommand> for ParsedCommand {
+    fn from(value: RedisCommand) -> Self {
+        Self::Normal(value)
+    }
+}
+
+impl TryFrom<&[u8]> for ParsedCommand {
+    type Error = Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let bytes = &value.to_ascii_uppercase();
         if let Some(command) = WriteCommand::parse(bytes) {
-            return Ok(Self::Write(command));
+            return Ok(RedisCommand::Write(command).into());
         }
         if let Some(command) = ReadCommand::parse(bytes) {
-            return Ok(Self::Read(command));
+            return Ok(RedisCommand::Read(command).into());
         }
         if let Some(command) = StatelessCommand::parse(bytes) {
-            return Ok(Self::Stateless(command));
+            return Ok(RedisCommand::Stateless(command).into());
         }
         if let Some(command) = ConnectionCommand::parse(bytes) {
-            return Ok(Self::Connection(command));
+            return Ok(RedisCommand::Connection(command).into());
         }
         if let Some(command) = TransactionCommand::parse(bytes) {
             return Ok(Self::Transaction(command));
         }
         Err(Error::UnknownCommand)
     }
+}
 
+impl ParsedCommand {
     pub const fn arity(&self) -> Arity {
         match self {
-            Self::Write(command) => command.arity(),
-            Self::Read(command) => command.arity(),
-            Self::Stateless(command) => command.arity(),
-            Self::Connection(command) => command.arity(),
+            Self::Normal(RedisCommand::Write(command)) => command.arity(),
+            Self::Normal(RedisCommand::Read(command)) => command.arity(),
+            Self::Normal(RedisCommand::Stateless(command)) => command.arity(),
+            Self::Normal(RedisCommand::Connection(command)) => command.arity(),
             Self::Transaction(command) => command.arity(),
         }
     }
-}
-
-pub enum Arity {
-    Fixed(usize),
-    AtLeast(usize),
 }
 
 macro_rules! commands {
@@ -162,17 +173,9 @@ macro_rules! stateless_commands {
     }
 }
 
-macro_rules! connecion_commands {
+macro_rules! connection_commands {
     ($($id:ident,)*) => {
         commands!(ConnectionCommand, $($id,)*);
-
-        impl ConnectionCommand {
-            pub async fn call(&self, conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult {
-                match self {
-                    $(Self::$id => $id::call(conn, args).await,)*
-                }
-            }
-        }
     }
 }
 
@@ -246,17 +249,16 @@ read_commands! {
 
 stateless_commands! {
     Echo,
-    Move,
     Ping,
-    Select,
     Shutdown,
     Time,
 }
 
-connecion_commands! {
+connection_commands! {
     Cluster,
     ReadOnly,
     ReadWrite,
+    Select,
 }
 
 transaction_commands! {
@@ -280,9 +282,4 @@ trait ReadCommandHandler: CommandSpec {
 
 trait StatelessCommandHandler: CommandSpec {
     fn call(args: &[Vec<u8>]) -> RedisResult;
-}
-
-#[async_trait]
-trait ConnectionCommandHandler: CommandSpec {
-    async fn call(conn: &mut RedisConnection, args: &[Vec<u8>]) -> RedisResult;
 }

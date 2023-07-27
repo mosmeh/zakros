@@ -1,14 +1,13 @@
-use crate::connection::ConnectionError;
+use crate::{error::ConnectionError, RedisResult};
 use bstr::ByteSlice;
 use bytes::{Buf, BufMut, BytesMut};
-use std::{io::Write, str::FromStr};
+use std::{fmt::Debug, io::Write, str::FromStr};
 use tokio_util::codec::{Decoder, Encoder};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum RedisValue {
     Null,
     SimpleString(&'static str),
-    Error(String),
     Integer(i64),
     BulkString(Vec<u8>),
     Array(Vec<RedisValue>),
@@ -35,6 +34,29 @@ impl From<Vec<u8>> for RedisValue {
 impl From<Vec<Self>> for RedisValue {
     fn from(value: Vec<Self>) -> Self {
         Self::Array(value)
+    }
+}
+
+impl Debug for RedisValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Null => write!(f, "null"),
+            Self::SimpleString(s) => write!(f, "simple({:?})", s),
+            Self::Integer(i) => write!(f, "int({})", i),
+            Self::BulkString(s) => write!(f, "bulk({:?})", s.as_bstr()),
+            Self::Array(values) => {
+                f.write_str("array(")?;
+                let mut is_first = true;
+                for x in values {
+                    if !is_first {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{:?}", x)?;
+                    is_first = false;
+                }
+                f.write_str(")")
+            }
+        }
     }
 }
 
@@ -102,43 +124,42 @@ impl Decoder for QueryDecoder {
 
 pub struct ResponseEncoder;
 
-impl Encoder<RedisValue> for ResponseEncoder {
+impl Encoder<RedisResult> for ResponseEncoder {
     type Error = std::io::Error;
 
-    fn encode(&mut self, item: RedisValue, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        encode(&mut dst.writer(), &item)
+    fn encode(&mut self, item: RedisResult, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let mut writer = dst.writer();
+        match item {
+            Ok(value) => encode(&mut writer, &value),
+            Err(err) => {
+                write!(writer, "-{}\r\n", err)
+            }
+        }
     }
 }
 
 fn encode<W: Write>(writer: &mut W, value: &RedisValue) -> std::io::Result<()> {
     match value {
-        RedisValue::Null => {
-            writer.write_all(b"$-1\r\n")?;
-        }
+        RedisValue::Null => writer.write_all(b"$-1\r\n"),
         RedisValue::SimpleString(s) => {
             writer.write_all(b"+")?;
             writer.write_all(s.as_bytes())?;
-            writer.write_all(b"\r\n")?;
-        }
-        RedisValue::Error(s) => {
-            writer.write_all(b"-")?;
-            writer.write_all(s.as_bytes())?;
-            writer.write_all(b"\r\n")?;
+            writer.write_all(b"\r\n")
         }
         RedisValue::Integer(i) => {
-            write!(writer, ":{}\r\n", i)?;
+            write!(writer, ":{}\r\n", i)
         }
         RedisValue::BulkString(s) => {
             write!(writer, "${}\r\n", s.len())?;
             writer.write_all(s)?;
-            writer.write_all(b"\r\n")?;
+            writer.write_all(b"\r\n")
         }
-        RedisValue::Array(a) => {
-            write!(writer, "*{}\r\n", a.len())?;
-            for x in a {
+        RedisValue::Array(values) => {
+            write!(writer, "*{}\r\n", values.len())?;
+            for x in values {
                 encode(writer, x)?;
             }
+            Ok(())
         }
     }
-    Ok(())
 }

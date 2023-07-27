@@ -2,8 +2,8 @@ use crate::command::{RedisCommand, TransactionCommand};
 
 #[derive(thiserror::Error, Debug, Clone)]
 pub enum Error {
-    #[error(transparent)]
-    Raft(#[from] zakros_raft::Error),
+    #[error("ERR Protocol error")]
+    ProtocolError,
 
     #[error("ERR unknown command")]
     UnknownCommand,
@@ -52,4 +52,13 @@ pub enum TransactionError {
 
     #[error("EXECABORT Transaction discarded because of previous errors.")]
     ExecAborted,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConnectionError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error("Protocol error")]
+    Protocol,
 }

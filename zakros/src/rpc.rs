@@ -1,18 +1,18 @@
-use crate::{store::Command, Args, SharedState};
+use crate::{store::Command, Args, RaftResult, SharedState};
+use async_trait::async_trait;
 use std::{sync::Arc, time::Duration};
 use tarpc::{context::Context, tokio_serde::formats::Bincode};
 use tokio::{io::AsyncWriteExt, net::TcpStream, time::timeout};
 use tokio_util::codec::LengthDelimitedCodec;
 use zakros_raft::{
     self,
-    async_trait::async_trait,
     transport::{
         AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport,
     },
     NodeId,
 };
 
-pub struct RpcHandler(pub Args);
+pub struct RpcHandler(pub(crate) Args);
 
 #[async_trait]
 impl Transport for RpcHandler {
@@ -67,14 +67,18 @@ impl RpcHandler {
 
 #[tarpc::service]
 pub trait RaftService {
-    async fn append_entries(
-        request: AppendEntries<Command>,
-    ) -> Result<AppendEntriesResponse, zakros_raft::Error>;
-    async fn request_vote(request: RequestVote) -> Result<RequestVoteResponse, zakros_raft::Error>;
+    async fn append_entries(request: AppendEntries<Command>) -> RaftResult<AppendEntriesResponse>;
+    async fn request_vote(request: RequestVote) -> RaftResult<RequestVoteResponse>;
 }
 
 #[derive(Clone)]
-pub struct RaftServer(pub Arc<SharedState>);
+pub struct RaftServer(Arc<SharedState>);
+
+impl RaftServer {
+    pub(crate) fn new(shared: Arc<SharedState>) -> Self {
+        Self(shared)
+    }
+}
 
 #[tarpc::server]
 impl RaftService for RaftServer {
@@ -82,7 +86,7 @@ impl RaftService for RaftServer {
         self,
         _: Context,
         request: AppendEntries<Command>,
-    ) -> Result<AppendEntriesResponse, zakros_raft::Error> {
+    ) -> RaftResult<AppendEntriesResponse> {
         self.0.raft.append_entries(request).await
     }
 
@@ -90,7 +94,7 @@ impl RaftService for RaftServer {
         self,
         _: Context,
         request: RequestVote,
-    ) -> Result<RequestVoteResponse, zakros_raft::Error> {
+    ) -> RaftResult<RequestVoteResponse> {
         self.0.raft.request_vote(request).await
     }
 }

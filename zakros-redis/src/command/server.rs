@@ -2,9 +2,9 @@ use super::{Arity, CommandSpec, ReadCommandHandler, StatelessCommandHandler, Wri
 use crate::{
     command,
     error::Error,
+    lockable::{ReadLockable, RwLockable},
     resp::RedisValue,
-    store::{Dictionary, ReadLockable, RwLockable},
-    RedisResult,
+    Dictionary, RedisResult,
 };
 use std::time::{Duration, SystemTime};
 

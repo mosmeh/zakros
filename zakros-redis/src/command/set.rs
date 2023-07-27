@@ -2,10 +2,9 @@ use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
     error::Error,
-    object::RedisObject,
+    lockable::{ReadLockable, RwLockable},
     resp::RedisValue,
-    store::{Dictionary, ReadLockable, RwLockable},
-    RedisResult,
+    Dictionary, RedisObject, RedisResult,
 };
 use std::collections::{hash_map::Entry, HashSet};
 

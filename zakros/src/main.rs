@@ -1,16 +1,9 @@
-mod command;
 mod connection;
-mod error;
-mod object;
-mod resp;
 mod rpc;
 mod store;
-mod string;
 
 use clap::Parser;
 use connection::RedisConnection;
-use error::Error;
-use resp::RedisValue;
 use rpc::{RaftServer, RaftService, RpcHandler};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use store::{Command, Store};
@@ -25,10 +18,10 @@ use tokio::{
 use tokio_util::codec::LengthDelimitedCodec;
 use zakros_raft::{storage::PersistentStorage, Config, NodeId, Raft};
 
-type RedisResult = Result<RedisValue, Error>;
+type RaftResult<T> = Result<T, zakros_raft::Error>;
 
 #[derive(Debug, Clone, Parser)]
-pub struct Args {
+struct Args {
     #[arg(short = 'n', long, default_value_t = 0)]
     id: u64,
 
@@ -76,7 +69,8 @@ async fn serve(args: Args) -> anyhow::Result<()> {
     let id = NodeId::from(args.id);
     let shared = Arc::new(SharedState::new(id, args).await);
     loop {
-        let (mut conn, _) = listener.accept().await?;
+        let (mut conn, addr) = listener.accept().await?;
+        tracing::trace!("accepting connection: {}", addr);
         let shared = shared.clone();
         tokio::spawn(async move {
             let Ok(is_raft) = is_raft(&mut conn).await else {
@@ -88,7 +82,7 @@ async fn serve(args: Args) -> anyhow::Result<()> {
                     Bincode::default(),
                 );
                 BaseChannel::with_defaults(transport)
-                    .execute(RaftServer(shared).serve())
+                    .execute(RaftServer::new(shared).serve())
                     .await;
             } else {
                 let _ = RedisConnection::new(shared).serve(conn).await;
@@ -97,7 +91,7 @@ async fn serve(args: Args) -> anyhow::Result<()> {
     }
 }
 
-pub struct SharedState {
+struct SharedState {
     args: Args,
     raft: Raft<Command>,
     store: Store,

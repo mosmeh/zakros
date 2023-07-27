@@ -3,12 +3,10 @@ pub mod transport;
 
 mod server;
 
-pub use async_trait;
-
-use self::server::Server;
+use async_trait::async_trait;
 use rand::{distributions::Uniform, prelude::Distribution};
 use serde::{Deserialize, Serialize};
-use server::Message;
+use server::{Message, Server};
 use std::{fmt::Debug, net::SocketAddr, sync::Arc, time::Duration};
 use storage::Storage;
 use tokio::{
@@ -209,7 +207,7 @@ pub trait Command: Send + Sync + Clone + 'static {
     type Output: Send;
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 pub trait StateMachine: Send + Sync + 'static {
     type Command: Command;
 

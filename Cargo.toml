@@ -1,9 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-	"zakros",
-	"zakros-raft"
-]
+members = ["zakros", "zakros-raft", "zakros-redis"]
 
 [profile.release]
 lto = true
