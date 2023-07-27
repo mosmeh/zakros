@@ -90,6 +90,32 @@ impl ReadCommandHandler for command::GetRange {
     }
 }
 
+impl CommandSpec for command::GetSet {
+    const NAME: &'static str = "GETSET";
+    const ARITY: Arity = Arity::Fixed(2);
+}
+
+impl WriteCommandHandler for command::GetSet {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        let [key, value] = args else {
+            return Err(Error::WrongArity);
+        };
+        match dict.write().entry(key.clone()) {
+            Entry::Occupied(mut entry) => {
+                let RedisObject::String(s) = entry.get_mut() else {
+                    return Err(Error::WrongType);
+                };
+                let prev_value = std::mem::replace(s, value.clone());
+                Ok(prev_value.into())
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(value.clone().into());
+                Ok(RedisValue::Null)
+            }
+        }
+    }
+}
+
 impl CommandSpec for command::MGet {
     const NAME: &'static str = "MGET";
     const ARITY: Arity = Arity::AtLeast(1);
@@ -179,21 +205,21 @@ impl WriteCommandHandler for command::Set {
         if nx && xx {
             return Err(Error::SyntaxError);
         }
-        let value = value.clone().into();
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 if get {
-                    let RedisObject::String(s) = entry.get() else {
+                    let RedisObject::String(s) = entry.get_mut() else {
                         return Err(Error::WrongType);
                     };
-                    let original_value = s.clone();
-                    if !nx {
-                        entry.insert(value);
-                    }
-                    return Ok(original_value.into());
+                    let prev_value = if nx {
+                        s.clone()
+                    } else {
+                        std::mem::replace(s, value.clone())
+                    };
+                    return Ok(prev_value.into());
                 }
                 Ok(if !nx {
-                    entry.insert(value);
+                    entry.insert(value.clone().into());
                     RedisValue::ok()
                 } else {
                     RedisValue::Null
@@ -201,7 +227,7 @@ impl WriteCommandHandler for command::Set {
             }
             Entry::Vacant(entry) => {
                 if !xx {
-                    entry.insert(value);
+                    entry.insert(value.clone().into());
                 }
                 Ok(if get || xx {
                     RedisValue::Null
@@ -210,6 +236,25 @@ impl WriteCommandHandler for command::Set {
                 })
             }
         }
+    }
+}
+
+impl CommandSpec for command::SetNx {
+    const NAME: &'static str = "SETNX";
+    const ARITY: Arity = Arity::Fixed(2);
+}
+
+impl WriteCommandHandler for command::SetNx {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        let [key, value] = args else {
+            return Err(Error::WrongArity);
+        };
+        let mut dict = dict.write();
+        let Entry::Vacant(entry) = dict.entry(key.clone()) else {
+            return Ok(0.into());
+        };
+        entry.insert(value.clone().into());
+        Ok(1.into())
     }
 }
 
@@ -266,5 +311,16 @@ impl ReadCommandHandler for command::StrLen {
             Some(_) => Err(Error::WrongType),
             None => Ok(0.into()),
         }
+    }
+}
+
+impl CommandSpec for command::SubStr {
+    const NAME: &'static str = "SUBSTR";
+    const ARITY: Arity = Arity::Fixed(3);
+}
+
+impl ReadCommandHandler for command::SubStr {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        command::GetRange::call(dict, args)
     }
 }

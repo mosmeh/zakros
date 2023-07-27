@@ -151,6 +151,17 @@ impl ReadCommandHandler for command::HMGet {
     }
 }
 
+impl CommandSpec for command::HMSet {
+    const NAME: &'static str = "HMSET";
+    const ARITY: Arity = Arity::AtLeast(3);
+}
+
+impl WriteCommandHandler for command::HMSet {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        command::HSet::call(dict, args)
+    }
+}
+
 impl CommandSpec for command::HStrLen {
     const NAME: &'static str = "HSTRLEN";
     const ARITY: Arity = Arity::Fixed(2);

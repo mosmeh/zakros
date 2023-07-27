@@ -205,6 +205,49 @@ impl WriteCommandHandler for command::RPop {
     }
 }
 
+impl CommandSpec for command::RPopLPush {
+    const NAME: &'static str = "RPOPLPUSH";
+    const ARITY: Arity = Arity::Fixed(2);
+}
+
+impl WriteCommandHandler for command::RPopLPush {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        let [source, destination] = args else {
+            return Err(Error::WrongArity);
+        };
+        let mut dict = dict.write();
+        match dict.get(destination) {
+            Some(RedisObject::List(_)) | None => (),
+            Some(_) => return Err(Error::WrongType),
+        }
+        let source_entry = dict.entry(source.clone());
+        let Entry::Occupied(mut source_entry) = source_entry else {
+            return Ok(RedisValue::Null);
+        };
+        let RedisObject::List(source_list) = source_entry.get_mut() else {
+            return Err(Error::WrongType);
+        };
+        let Some(value) = source_list.pop_back() else {
+            unreachable!()
+        };
+        if source_list.is_empty() {
+            source_entry.remove();
+        }
+        match dict.entry(destination.clone()) {
+            Entry::Occupied(mut dest_entry) => {
+                let RedisObject::List(dest_list) = dest_entry.get_mut() else {
+                    unreachable!()
+                };
+                dest_list.push_front(value.clone());
+            }
+            Entry::Vacant(dest_entry) => {
+                dest_entry.insert(RedisObject::List([value.clone()].into()));
+            }
+        }
+        Ok(value.into())
+    }
+}
+
 impl CommandSpec for command::RPush {
     const NAME: &'static str = "RPUSH";
     const ARITY: Arity = Arity::AtLeast(2);
