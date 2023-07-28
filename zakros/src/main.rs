@@ -5,7 +5,7 @@ mod store;
 use clap::Parser;
 use connection::RedisConnection;
 use rpc::{RaftServer, RaftService, RpcHandler};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::SystemTime};
 use store::{Command, Store};
 use tarpc::{
     server::{BaseChannel, Channel},
@@ -14,6 +14,7 @@ use tarpc::{
 use tokio::{
     io::AsyncReadExt,
     net::{TcpListener, TcpStream},
+    sync::Semaphore,
 };
 use tokio_util::codec::LengthDelimitedCodec;
 use zakros_raft::{storage::PersistentStorage, Config, NodeId, Raft};
@@ -21,7 +22,7 @@ use zakros_raft::{storage::PersistentStorage, Config, NodeId, Raft};
 type RaftResult<T> = Result<T, zakros_raft::Error>;
 
 #[derive(Debug, Clone, Parser)]
-struct Args {
+struct Opts {
     #[arg(short = 'n', long, default_value_t = 0)]
     id: u64,
 
@@ -33,12 +34,15 @@ struct Args {
 
     #[arg(short = 'd', long, default_value = "data")]
     dir: PathBuf,
+
+    #[arg(long, default_value_t = 10000)]
+    max_num_clients: usize,
 }
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::try_init().map_err(anyhow::Error::msg)?;
 
-    let mut args = Args::parse();
+    let mut args = Opts::parse();
     if args.cluster_addrs.is_empty() {
         args.cluster_addrs.push(args.bind_addr);
     }
@@ -63,7 +67,7 @@ async fn is_raft(conn: &mut TcpStream) -> std::io::Result<bool> {
     }
 }
 
-async fn serve(args: Args) -> anyhow::Result<()> {
+async fn serve(args: Opts) -> anyhow::Result<()> {
     let listener = TcpListener::bind(args.bind_addr).await?;
     tracing::info!("bound to {}", listener.local_addr()?);
     let id = NodeId::from(args.id);
@@ -92,26 +96,35 @@ async fn serve(args: Args) -> anyhow::Result<()> {
 }
 
 struct SharedState {
-    args: Args,
+    opts: Opts,
     raft: Raft<Command>,
     store: Store,
+    started_at: SystemTime,
+    conn_limit: Arc<Semaphore>,
 }
 
 impl SharedState {
-    async fn new(node_id: NodeId, args: Args) -> Self {
+    async fn new(node_id: NodeId, opts: Opts) -> Self {
         let store = Store::default();
         let raft = Raft::spawn(
             node_id,
-            (0..args.cluster_addrs.len() as u64)
+            (0..opts.cluster_addrs.len() as u64)
                 .map(NodeId::from)
                 .collect(),
             Config::default(),
             store.clone(),
-            PersistentStorage::new(args.dir.join(Into::<u64>::into(node_id).to_string()))
+            PersistentStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string()))
                 .await
                 .unwrap(),
-            Arc::new(RpcHandler(args.clone())),
+            Arc::new(RpcHandler(opts.clone())),
         );
-        Self { raft, args, store }
+        let conn_limit = Arc::new(Semaphore::new(opts.max_num_clients));
+        Self {
+            raft,
+            opts,
+            store,
+            started_at: SystemTime::now(),
+            conn_limit,
+        }
     }
 }

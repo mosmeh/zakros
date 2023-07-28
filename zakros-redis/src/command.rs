@@ -261,6 +261,7 @@ stateless_commands! {
 
 connection_commands! {
     Cluster,
+    Info,
     ReadOnly,
     ReadWrite,
     Select,

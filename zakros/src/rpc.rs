@@ -1,4 +1,4 @@
-use crate::{store::Command, Args, RaftResult, SharedState};
+use crate::{store::Command, Opts, RaftResult, SharedState};
 use async_trait::async_trait;
 use std::{sync::Arc, time::Duration};
 use tarpc::{context::Context, tokio_serde::formats::Bincode};
@@ -12,7 +12,7 @@ use zakros_raft::{
     NodeId,
 };
 
-pub struct RpcHandler(pub(crate) Args);
+pub struct RpcHandler(pub(crate) Opts);
 
 #[async_trait]
 impl Transport for RpcHandler {
