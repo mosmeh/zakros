@@ -3,8 +3,8 @@ use crate::{
     command,
     error::Error,
     lockable::{ReadLockable, RwLockable},
-    resp::RedisValue,
-    Dictionary, RedisObject, RedisResult,
+    resp::Value,
+    Dictionary, Object, RedisResult,
 };
 use std::collections::{hash_map::Entry, HashSet};
 
@@ -22,7 +22,7 @@ impl WriteCommandHandler for command::SAdd {
         };
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
-                let RedisObject::Set(set) = entry.get_mut() else {
+                let Object::Set(set) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
                 set.reserve(members.len());
@@ -35,9 +35,7 @@ impl WriteCommandHandler for command::SAdd {
                 Ok(num_inserted.into())
             }
             Entry::Vacant(entry) => {
-                entry.insert(RedisObject::Set(HashSet::from_iter(
-                    members.iter().cloned(),
-                )));
+                entry.insert(Object::Set(HashSet::from_iter(members.iter().cloned())));
                 Ok((members.len() as i64).into())
             }
         }
@@ -55,7 +53,7 @@ impl ReadCommandHandler for command::SCard {
             return Err(Error::WrongArity);
         };
         match dict.read().get(key) {
-            Some(RedisObject::Set(set)) => Ok((set.len() as i64).into()),
+            Some(Object::Set(set)) => Ok((set.len() as i64).into()),
             Some(_) => Err(Error::WrongType),
             None => Ok(0.into()),
         }
@@ -117,7 +115,7 @@ impl ReadCommandHandler for command::SIsMember {
             return Err(Error::WrongArity);
         };
         match dict.read().get(key) {
-            Some(RedisObject::Set(set)) => Ok((set.contains(member) as i64).into()),
+            Some(Object::Set(set)) => Ok((set.contains(member) as i64).into()),
             Some(_) => Err(Error::WrongType),
             None => Ok(0.into()),
         }
@@ -135,13 +133,12 @@ impl ReadCommandHandler for command::SMembers {
             return Err(Error::WrongArity);
         };
         match dict.read().get(key) {
-            Some(RedisObject::Set(set)) => {
-                let members: Vec<RedisValue> =
-                    set.iter().map(|member| member.clone().into()).collect();
+            Some(Object::Set(set)) => {
+                let members: Vec<Value> = set.iter().map(|member| member.clone().into()).collect();
                 Ok(members.into())
             }
             Some(_) => Err(Error::WrongType),
-            None => Ok(RedisValue::Array(Vec::new())),
+            None => Ok(Value::Array(Vec::new())),
         }
     }
 }
@@ -158,14 +155,14 @@ impl WriteCommandHandler for command::SMove {
         };
         let mut dict = dict.write();
         match dict.get(destination) {
-            Some(RedisObject::Set(_)) | None => (),
+            Some(Object::Set(_)) | None => (),
             Some(_) => return Err(Error::WrongType),
         }
         let source_entry = dict.entry(source.clone());
         let Entry::Occupied(mut source_entry) = source_entry else {
             return Ok(0.into());
         };
-        let RedisObject::Set(source_set) = source_entry.get_mut() else {
+        let Object::Set(source_set) = source_entry.get_mut() else {
             return Err(Error::WrongType);
         };
         if !source_set.remove(member) {
@@ -173,13 +170,13 @@ impl WriteCommandHandler for command::SMove {
         }
         match dict.entry(destination.clone()) {
             Entry::Occupied(mut dest_entry) => {
-                let RedisObject::Set(dest_set) = dest_entry.get_mut() else {
+                let Object::Set(dest_set) = dest_entry.get_mut() else {
                     unreachable!()
                 };
                 dest_set.insert(member.clone());
             }
             Entry::Vacant(dest_entry) => {
-                dest_entry.insert(RedisObject::Set([member.clone()].into()));
+                dest_entry.insert(Object::Set([member.clone()].into()));
             }
         }
         Ok(1.into())
@@ -203,7 +200,7 @@ impl WriteCommandHandler for command::SRem {
         let Entry::Occupied(mut entry) = entry else {
             return Ok(0.into());
         };
-        let RedisObject::Set(set) = entry.get_mut() else {
+        let Object::Set(set) = entry.get_mut() else {
             return Err(Error::WrongType);
         };
         let mut num_removed = 0;
@@ -246,7 +243,7 @@ where
     let [a_key, b_keys @ ..] = args else {
         return Err(Error::WrongArity);
     };
-    let values: Vec<RedisValue> = apply(&dict.read(), a_key, b_keys, f)?
+    let values: Vec<Value> = apply(&dict.read(), a_key, b_keys, f)?
         .into_iter()
         .map(Into::into)
         .collect();
@@ -264,7 +261,7 @@ where
     let mut dict = dict.write();
     let set = apply(&dict, a_key, b_keys, f)?;
     let len = set.len();
-    dict.insert(destination.clone(), RedisObject::Set(set));
+    dict.insert(destination.clone(), Object::Set(set));
     Ok((len as i64).into())
 }
 
@@ -278,13 +275,13 @@ where
     F: Fn(&mut HashSet<Vec<u8>>, &HashSet<Vec<u8>>),
 {
     let mut a_set = match dict.get(a_key) {
-        Some(RedisObject::Set(set)) => set.clone(),
+        Some(Object::Set(set)) => set.clone(),
         Some(_) => return Err(Error::WrongType),
         None => Default::default(),
     };
     for b_key in b_keys {
         match dict.get(b_key) {
-            Some(RedisObject::Set(b_set)) => f(&mut a_set, b_set),
+            Some(Object::Set(b_set)) => f(&mut a_set, b_set),
             Some(_) => return Err(Error::WrongType),
             None => (),
         }

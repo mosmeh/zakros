@@ -4,40 +4,40 @@ use bytes::{Buf, BufMut, BytesMut};
 use std::{fmt::Debug, io::Write, str::FromStr};
 use tokio_util::codec::{Decoder, Encoder};
 
-#[derive(Clone)]
-pub enum RedisValue {
+#[derive(Clone, PartialEq, Eq)]
+pub enum Value {
     Null,
     SimpleString(&'static str),
     Integer(i64),
     BulkString(Vec<u8>),
-    Array(Vec<RedisValue>),
+    Array(Vec<Value>),
 }
 
-impl From<&'static str> for RedisValue {
+impl From<&'static str> for Value {
     fn from(value: &'static str) -> Self {
         Self::SimpleString(value)
     }
 }
 
-impl From<i64> for RedisValue {
+impl From<i64> for Value {
     fn from(value: i64) -> Self {
         Self::Integer(value)
     }
 }
 
-impl From<Vec<u8>> for RedisValue {
+impl From<Vec<u8>> for Value {
     fn from(value: Vec<u8>) -> Self {
         Self::BulkString(value)
     }
 }
 
-impl From<Vec<Self>> for RedisValue {
+impl From<Vec<Self>> for Value {
     fn from(value: Vec<Self>) -> Self {
         Self::Array(value)
     }
 }
 
-impl Debug for RedisValue {
+impl Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Null => write!(f, "null"),
@@ -60,7 +60,7 @@ impl Debug for RedisValue {
     }
 }
 
-impl RedisValue {
+impl Value {
     pub const fn ok() -> Self {
         Self::SimpleString("OK")
     }
@@ -138,23 +138,23 @@ impl Encoder<RedisResult> for ResponseEncoder {
     }
 }
 
-fn encode<W: Write>(writer: &mut W, value: &RedisValue) -> std::io::Result<()> {
+fn encode<W: Write>(writer: &mut W, value: &Value) -> std::io::Result<()> {
     match value {
-        RedisValue::Null => writer.write_all(b"$-1\r\n"),
-        RedisValue::SimpleString(s) => {
+        Value::Null => writer.write_all(b"$-1\r\n"),
+        Value::SimpleString(s) => {
             writer.write_all(b"+")?;
             writer.write_all(s.as_bytes())?;
             writer.write_all(b"\r\n")
         }
-        RedisValue::Integer(i) => {
+        Value::Integer(i) => {
             write!(writer, ":{}\r\n", i)
         }
-        RedisValue::BulkString(s) => {
+        Value::BulkString(s) => {
             write!(writer, "${}\r\n", s.len())?;
             writer.write_all(s)?;
             writer.write_all(b"\r\n")
         }
-        RedisValue::Array(values) => {
+        Value::Array(values) => {
             write!(writer, "*{}\r\n", values.len())?;
             for x in values {
                 encode(writer, x)?;

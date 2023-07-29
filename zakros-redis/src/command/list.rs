@@ -3,8 +3,8 @@ use crate::{
     command,
     error::Error,
     lockable::{ReadLockable, RwLockable},
-    resp::RedisValue,
-    BytesExt, Dictionary, RedisObject, RedisResult,
+    resp::Value,
+    BytesExt, Dictionary, Object, RedisResult,
 };
 use std::collections::{hash_map::Entry, VecDeque};
 
@@ -20,9 +20,9 @@ impl ReadCommandHandler for command::LIndex {
         };
         let dict = dict.read();
         let list = match dict.get(key) {
-            Some(RedisObject::List(list)) => list,
+            Some(Object::List(list)) => list,
             Some(_) => return Err(Error::WrongType),
-            None => return Ok(RedisValue::Null),
+            None => return Ok(Value::Null),
         };
         let mut index = index.to_i64()?;
         if index < 0 {
@@ -33,7 +33,7 @@ impl ReadCommandHandler for command::LIndex {
                 return Ok(element.clone().into());
             }
         }
-        Ok(RedisValue::Null)
+        Ok(Value::Null)
     }
 }
 
@@ -48,7 +48,7 @@ impl ReadCommandHandler for command::LLen {
             return Err(Error::WrongArity);
         };
         match dict.read().get(key) {
-            Some(RedisObject::List(list)) => Ok((list.len() as i64).into()),
+            Some(Object::List(list)) => Ok((list.len() as i64).into()),
             Some(_) => Err(Error::WrongType),
             None => Ok(0.into()),
         }
@@ -102,9 +102,9 @@ impl ReadCommandHandler for command::LRange {
         let mut stop = stop.to_i64()?;
         let dict = dict.read();
         let list = match dict.get(key) {
-            Some(RedisObject::List(list)) => list,
+            Some(Object::List(list)) => list,
             Some(_) => return Err(Error::WrongType),
-            None => return Ok(RedisValue::Null),
+            None => return Ok(Value::Null),
         };
         let len = list.len() as i64;
         if start < 0 {
@@ -114,7 +114,7 @@ impl ReadCommandHandler for command::LRange {
             stop += len;
         }
         if start > stop || start >= len {
-            return Ok(RedisValue::Array(Vec::new()));
+            return Ok(Value::Array(Vec::new()));
         }
         stop = stop.min(len - 1);
         let values = list
@@ -123,7 +123,7 @@ impl ReadCommandHandler for command::LRange {
             .take((stop - start) as usize + 1)
             .map(|value| value.clone().into())
             .collect();
-        Ok(RedisValue::Array(values))
+        Ok(Value::Array(values))
     }
 }
 
@@ -139,7 +139,7 @@ impl WriteCommandHandler for command::LSet {
         };
         let mut dict = dict.write();
         let list = match dict.get_mut(key) {
-            Some(RedisObject::List(list)) => list,
+            Some(Object::List(list)) => list,
             Some(_) => return Err(Error::WrongType),
             None => return Err(Error::NoKey),
         };
@@ -150,7 +150,7 @@ impl WriteCommandHandler for command::LSet {
         if let Ok(index) = index.try_into() {
             if let Some(e) = list.get_mut(index) {
                 *e = element.clone();
-                return Ok(RedisValue::ok());
+                return Ok(Value::ok());
             }
         }
         Err(Error::IndexOutOfRange)
@@ -171,7 +171,7 @@ impl WriteCommandHandler for command::LTrim {
         let mut stop = stop.to_i64()?;
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
-                let RedisObject::List(list) = entry.get_mut() else {
+                let Object::List(list) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
                 let len = list.len() as i64;
@@ -187,9 +187,9 @@ impl WriteCommandHandler for command::LTrim {
                     list.truncate(stop as usize + 1);
                     list.drain(..start as usize);
                 }
-                Ok(RedisValue::ok())
+                Ok(Value::ok())
             }
-            Entry::Vacant(_) => Ok(RedisValue::ok()),
+            Entry::Vacant(_) => Ok(Value::ok()),
         }
     }
 }
@@ -217,14 +217,14 @@ impl WriteCommandHandler for command::RPopLPush {
         };
         let mut dict = dict.write();
         match dict.get(destination) {
-            Some(RedisObject::List(_)) | None => (),
+            Some(Object::List(_)) | None => (),
             Some(_) => return Err(Error::WrongType),
         }
         let source_entry = dict.entry(source.clone());
         let Entry::Occupied(mut source_entry) = source_entry else {
-            return Ok(RedisValue::Null);
+            return Ok(Value::Null);
         };
-        let RedisObject::List(source_list) = source_entry.get_mut() else {
+        let Object::List(source_list) = source_entry.get_mut() else {
             return Err(Error::WrongType);
         };
         let Some(value) = source_list.pop_back() else {
@@ -235,13 +235,13 @@ impl WriteCommandHandler for command::RPopLPush {
         }
         match dict.entry(destination.clone()) {
             Entry::Occupied(mut dest_entry) => {
-                let RedisObject::List(dest_list) = dest_entry.get_mut() else {
+                let Object::List(dest_list) = dest_entry.get_mut() else {
                     unreachable!()
                 };
                 dest_list.push_front(value.clone());
             }
             Entry::Vacant(dest_entry) => {
-                dest_entry.insert(RedisObject::List([value.clone()].into()));
+                dest_entry.insert(Object::List([value.clone()].into()));
             }
         }
         Ok(value.into())
@@ -282,7 +282,7 @@ where
     };
     match dict.write().entry(key.clone()) {
         Entry::Occupied(mut entry) => {
-            let RedisObject::List(list) = entry.get_mut() else {
+            let Object::List(list) = entry.get_mut() else {
                 return Err(Error::WrongType);
             };
             list.reserve(elements.len());
@@ -299,7 +299,7 @@ where
                 for element in elements {
                     f(&mut list, element.clone());
                 }
-                entry.insert(RedisObject::List(list));
+                entry.insert(Object::List(list));
                 Ok((elements.len() as i64).into())
             }
         }
@@ -314,24 +314,24 @@ where
     match args {
         [key] => match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
-                let RedisObject::List(list) = entry.get_mut() else {
+                let Object::List(list) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
                 let Some(value) = f(list) else {
-                    return Ok(RedisValue::Null);
+                    return Ok(Value::Null);
                 };
                 if list.is_empty() {
                     entry.remove();
                 }
                 Ok(value.into())
             }
-            Entry::Vacant(_) => Ok(RedisValue::Null),
+            Entry::Vacant(_) => Ok(Value::Null),
         },
         [key, count] => {
             let count = count.to_u64()?;
             match dict.write().entry(key.clone()) {
                 Entry::Occupied(mut entry) => {
-                    let RedisObject::List(list) = entry.get_mut() else {
+                    let Object::List(list) = entry.get_mut() else {
                         return Err(Error::WrongType);
                     };
                     let mut values = Vec::with_capacity(count as usize);
@@ -344,9 +344,9 @@ where
                     if list.is_empty() {
                         entry.remove();
                     }
-                    Ok(RedisValue::Array(values))
+                    Ok(Value::Array(values))
                 }
-                Entry::Vacant(_) => Ok(RedisValue::Null),
+                Entry::Vacant(_) => Ok(Value::Null),
             }
         }
         _ => Err(Error::WrongArity),

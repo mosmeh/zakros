@@ -8,25 +8,25 @@ mod string;
 
 use bstr::ByteSlice;
 use error::Error;
-use resp::RedisValue;
+use resp::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-pub type RedisResult = Result<RedisValue, Error>;
+pub type RedisResult = Result<Value, Error>;
 
-pub enum RedisObject {
+pub enum Object {
     String(Vec<u8>),
     List(VecDeque<Vec<u8>>),
     Set(HashSet<Vec<u8>>),
     Hash(HashMap<Vec<u8>, Vec<u8>>),
 }
 
-impl From<Vec<u8>> for RedisObject {
+impl From<Vec<u8>> for Object {
     fn from(value: Vec<u8>) -> Self {
         Self::String(value)
     }
 }
 
-pub type Dictionary = HashMap<Vec<u8>, RedisObject>;
+pub type Dictionary = HashMap<Vec<u8>, Object>;
 
 pub trait BytesExt {
     fn to_i32(&self) -> Result<i32, Error>;

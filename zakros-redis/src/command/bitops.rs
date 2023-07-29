@@ -3,7 +3,7 @@ use crate::{
     command,
     error::Error,
     lockable::{ReadLockable, RwLockable},
-    BytesExt, Dictionary, RedisObject, RedisResult,
+    BytesExt, Dictionary, Object, RedisResult,
 };
 use std::collections::hash_map::Entry;
 
@@ -19,7 +19,7 @@ impl ReadCommandHandler for command::BitCount {
         };
         let dict = dict.read();
         let s = match dict.get(key) {
-            Some(RedisObject::String(s)) => s,
+            Some(Object::String(s)) => s,
             Some(_) => return Err(Error::WrongType),
             None => return Ok(0.into()),
         };
@@ -113,7 +113,7 @@ impl WriteCommandHandler for command::BitOp {
         let mut dict = dict.write();
         for key in keys {
             match dict.get(key) {
-                Some(RedisObject::String(s)) => {
+                Some(Object::String(s)) => {
                     sources.push(s.iter().fuse());
                     max_len = max_len.max(s.len());
                 }
@@ -169,7 +169,7 @@ impl ReadCommandHandler for command::GetBit {
         let offset = offset.to_u64()?;
         let dict = dict.read();
         let s = match dict.get(key) {
-            Some(RedisObject::String(s)) => s,
+            Some(Object::String(s)) => s,
             Some(_) => return Err(Error::WrongType),
             None => return Ok(0.into()),
         };
@@ -202,7 +202,7 @@ impl WriteCommandHandler for command::SetBit {
         let required_len = byte_index + 1;
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
-                let RedisObject::String(s) = entry.get_mut() else {
+                let Object::String(s) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
                 if s.len() < required_len {

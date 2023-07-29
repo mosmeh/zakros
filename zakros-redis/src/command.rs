@@ -16,7 +16,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RedisCommand {
     Write(WriteCommand),
     Read(ReadCommand),
@@ -89,7 +89,7 @@ impl ParsedCommand {
 
 macro_rules! commands {
     ($kind:ident, $($id:ident,)*) => {
-        #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
         pub enum $kind {
             $($id,)*
         }
@@ -189,9 +189,10 @@ write_commands! {
     Append,
     BitOp,
     Del,
-    GetSet,
     FlushAll,
     FlushDb,
+    GetDel,
+    GetSet,
     HDel,
     HMSet,
     HSet,

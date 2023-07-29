@@ -13,7 +13,7 @@ use zakros_raft::NodeId;
 use zakros_redis::{
     command::{ConnectionCommand, RedisCommand},
     error::{ConnectionError, Error},
-    resp::{QueryDecoder, RedisValue, ResponseEncoder},
+    resp::{QueryDecoder, ResponseEncoder, Value},
     session::{RedisSession, SessionHandler},
     BytesExt, RedisResult,
 };
@@ -128,14 +128,14 @@ impl Handler {
     }
 
     async fn handle_cluster(&self, args: &[Vec<u8>]) -> RaftResult<RedisResult> {
-        fn format_node_id(node_id: NodeId) -> RedisValue {
+        fn format_node_id(node_id: NodeId) -> Value {
             format!("{:0>40x}", Into::<u64>::into(node_id))
                 .into_bytes()
                 .into()
         }
 
-        fn format_node(node_id: NodeId, addr: SocketAddr) -> RedisValue {
-            RedisValue::Array(vec![
+        fn format_node(node_id: NodeId, addr: SocketAddr) -> Value {
+            Value::Array(vec![
                 addr.ip().to_string().into_bytes().into(),
                 (addr.port() as i64).into(),
                 format_node_id(node_id),
@@ -164,7 +164,7 @@ impl Handler {
                         response.push(format_node(NodeId::from(i as u64), *addr));
                     }
                 }
-                Ok(Ok(RedisValue::Array(vec![RedisValue::Array(response)])))
+                Ok(Ok(Value::Array(vec![Value::Array(response)])))
             }
             b"INFO" | b"NODES" => todo!(),
             _ => Ok(Err(Error::UnknownSubcommand)),
@@ -193,7 +193,7 @@ impl Handler {
     fn handle_readonly(&mut self, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
             self.is_readonly = true;
-            Ok(RedisValue::ok())
+            Ok(Value::ok())
         } else {
             Err(Error::WrongArity)
         }
@@ -202,7 +202,7 @@ impl Handler {
     fn handle_readwrite(&mut self, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
             self.is_readonly = false;
-            Ok(RedisValue::ok())
+            Ok(Value::ok())
         } else {
             Err(Error::WrongArity)
         }
@@ -213,7 +213,7 @@ impl Handler {
             return Err(Error::WrongArity);
         };
         if index.to_i32()? == 0 {
-            Ok(RedisValue::ok())
+            Ok(Value::ok())
         } else {
             Err(Error::Custom(
                 "ERR SELECT is not allowed in cluster mode".to_owned(),

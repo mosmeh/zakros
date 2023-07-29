@@ -1,11 +1,12 @@
 use crate::{
     command::{Arity, ParsedCommand, RedisCommand, TransactionCommand},
     error::{Error, TransactionError},
-    resp::RedisValue,
+    resp::Value,
     RedisResult,
 };
 use async_trait::async_trait;
 
+#[derive(Default)]
 pub struct RedisSession<H> {
     handler: H,
     txn: Transaction,
@@ -66,7 +67,7 @@ impl<H: SessionHandler> RedisSession<H> {
                 TransactionCommand::Multi => match self.txn {
                     Transaction::Inactive => {
                         self.txn = Transaction::Queued(Default::default());
-                        Ok(Ok(RedisValue::ok()))
+                        Ok(Ok(Value::ok()))
                     }
                     Transaction::Queued(_) | Transaction::Error => {
                         Ok(Err(TransactionError::NestedMulti.into()))
@@ -92,7 +93,7 @@ impl<H: SessionHandler> RedisSession<H> {
                     }
                     Transaction::Queued(_) | Transaction::Error => {
                         self.txn = Transaction::Inactive;
-                        Ok(Ok(RedisValue::ok()))
+                        Ok(Ok(Value::ok()))
                     }
                 },
             },
@@ -116,7 +117,9 @@ pub trait SessionHandler {
     ) -> Result<RedisResult, Self::Error>;
 }
 
+#[derive(Default)]
 enum Transaction {
+    #[default]
     Inactive,
     Queued(Vec<(RedisCommand, Vec<Vec<u8>>)>),
     Error,

@@ -3,7 +3,7 @@ use crate::{
     command,
     error::Error,
     lockable::{ReadLockable, RwLockable},
-    resp::RedisValue,
+    resp::Value,
     Dictionary, RedisResult,
 };
 use std::time::{Duration, SystemTime};
@@ -92,7 +92,7 @@ impl StatelessCommandHandler for command::Time {
         let since_epoch = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or(Duration::ZERO);
-        Ok(RedisValue::Array(vec![
+        Ok(Value::Array(vec![
             since_epoch.as_secs().to_string().into_bytes().into(),
             since_epoch.subsec_micros().to_string().into_bytes().into(),
         ]))
@@ -102,7 +102,7 @@ impl StatelessCommandHandler for command::Time {
 fn flush<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
     if args.len() <= 1 {
         dict.write().clear();
-        Ok(RedisValue::ok())
+        Ok(Value::ok())
     } else {
         Err(Error::WrongArity)
     }

@@ -1,6 +1,6 @@
 use crate::command::{RedisCommand, TransactionCommand};
 
-#[derive(thiserror::Error, Debug, Clone)]
+#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     #[error("ERR Protocol error")]
     ProtocolError,
@@ -39,7 +39,7 @@ pub enum Error {
     Custom(String),
 }
 
-#[derive(thiserror::Error, Debug, Clone)]
+#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
 pub enum TransactionError {
     #[error("ERR MULTI calls can not be nested")]
     NestedMulti,

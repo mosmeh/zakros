@@ -3,8 +3,8 @@ use crate::{
     command,
     error::Error,
     lockable::{ReadLockable, RwLockable},
-    resp::RedisValue,
-    Dictionary, RedisObject, RedisResult,
+    resp::Value,
+    Dictionary, Object, RedisResult,
 };
 
 impl CommandSpec for command::Del {
@@ -65,7 +65,7 @@ impl ReadCommandHandler for command::Keys {
             .filter(|key| crate::string::string_matches(pattern, key))
             .map(|key| key.clone().into())
             .collect();
-        Ok(RedisValue::Array(keys))
+        Ok(Value::Array(keys))
     }
 }
 
@@ -83,7 +83,7 @@ impl WriteCommandHandler for command::Rename {
         match dict.remove(key) {
             Some(value) => {
                 dict.insert(new_key.clone(), value);
-                Ok(RedisValue::ok())
+                Ok(Value::ok())
             }
             None => Err(Error::NoKey),
         }
@@ -141,10 +141,10 @@ impl ReadCommandHandler for command::Type {
             return Err(Error::WrongArity);
         };
         let ty = match dict.read().get(key) {
-            Some(RedisObject::String(_)) => "string",
-            Some(RedisObject::List(_)) => "list",
-            Some(RedisObject::Set(_)) => "set",
-            Some(RedisObject::Hash(_)) => "hash",
+            Some(Object::String(_)) => "string",
+            Some(Object::List(_)) => "list",
+            Some(Object::Set(_)) => "set",
+            Some(Object::Hash(_)) => "hash",
             None => "none",
         };
         Ok(ty.into())

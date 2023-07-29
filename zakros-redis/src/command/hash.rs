@@ -3,8 +3,8 @@ use crate::{
     command,
     error::Error,
     lockable::{ReadLockable, RwLockable},
-    resp::RedisValue,
-    Dictionary, RedisObject, RedisResult,
+    resp::Value,
+    Dictionary, Object, RedisResult,
 };
 use std::collections::{hash_map::Entry, HashMap};
 
@@ -25,7 +25,7 @@ impl WriteCommandHandler for command::HDel {
         let Entry::Occupied(mut entry) = entry else {
             return Ok(0.into());
         };
-        let RedisObject::Hash(hash) = entry.get_mut() else {
+        let Object::Hash(hash) = entry.get_mut() else {
             return Err(Error::WrongType);
         };
         let mut num_removed = 0;
@@ -49,7 +49,7 @@ impl ReadCommandHandler for command::HExists {
             return Err(Error::WrongArity);
         };
         match dict.read().get(key) {
-            Some(RedisObject::Hash(hash)) => Ok((hash.contains_key(field) as i64).into()),
+            Some(Object::Hash(hash)) => Ok((hash.contains_key(field) as i64).into()),
             Some(_) => Err(Error::WrongType),
             None => Ok(0.into()),
         }
@@ -67,12 +67,12 @@ impl ReadCommandHandler for command::HGet {
             return Err(Error::WrongArity);
         };
         match dict.read().get(key) {
-            Some(RedisObject::Hash(hash)) => match hash.get(field) {
+            Some(Object::Hash(hash)) => match hash.get(field) {
                 Some(value) => Ok(value.clone().into()),
-                None => Ok(RedisValue::Null),
+                None => Ok(Value::Null),
             },
             Some(_) => Err(Error::WrongType),
-            None => Ok(RedisValue::Null),
+            None => Ok(Value::Null),
         }
     }
 }
@@ -90,7 +90,7 @@ impl ReadCommandHandler for command::HGetAll {
                 responses.push(field.clone().into());
                 responses.push(value.clone().into());
             }
-            RedisValue::Array(responses)
+            Value::Array(responses)
         })
     }
 }
@@ -105,7 +105,7 @@ impl ReadCommandHandler for command::HKeys {
         read_hash(dict, args, |hash| {
             hash.keys()
                 .map(|field| field.clone().into())
-                .collect::<Vec<RedisValue>>()
+                .collect::<Vec<Value>>()
                 .into()
         })
     }
@@ -135,18 +135,18 @@ impl ReadCommandHandler for command::HMGet {
             _ => return Err(Error::WrongArity),
         };
         match dict.read().get(key) {
-            Some(RedisObject::Hash(hash)) => {
+            Some(Object::Hash(hash)) => {
                 let values = fields
                     .iter()
                     .map(|field| match hash.get(field) {
                         Some(value) => value.clone().into(),
-                        None => RedisValue::Null,
+                        None => Value::Null,
                     })
                     .collect();
-                Ok(RedisValue::Array(values))
+                Ok(Value::Array(values))
             }
             Some(_) => Err(Error::WrongType),
-            None => Ok(vec![RedisValue::Null; fields.len()].into()),
+            None => Ok(vec![Value::Null; fields.len()].into()),
         }
     }
 }
@@ -173,7 +173,7 @@ impl ReadCommandHandler for command::HStrLen {
             return Err(Error::WrongArity);
         };
         match dict.read().get(key) {
-            Some(RedisObject::Hash(hash)) => match hash.get(field) {
+            Some(Object::Hash(hash)) => match hash.get(field) {
                 Some(value) => Ok((value.len() as i64).into()),
                 None => Ok(0.into()),
             },
@@ -197,7 +197,7 @@ impl WriteCommandHandler for command::HSet {
         };
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
-                let RedisObject::Hash(hash) = entry.get_mut() else {
+                let Object::Hash(hash) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
                 let mut num_added = 0;
@@ -215,7 +215,7 @@ impl WriteCommandHandler for command::HSet {
                     let [field, value] = pair else { unreachable!() };
                     (field.clone(), value.clone())
                 });
-                entry.insert(RedisObject::Hash(HashMap::from_iter(pairs)));
+                entry.insert(Object::Hash(HashMap::from_iter(pairs)));
                 Ok(len.into())
             }
         }
@@ -234,7 +234,7 @@ impl WriteCommandHandler for command::HSetNx {
         };
         let was_set = match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
-                let RedisObject::Hash(hash) = entry.get_mut() else {
+                let Object::Hash(hash) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
                 match hash.entry(field.clone()) {
@@ -246,7 +246,7 @@ impl WriteCommandHandler for command::HSetNx {
                 }
             }
             Entry::Vacant(entry) => {
-                entry.insert(RedisObject::Hash(HashMap::from([(
+                entry.insert(Object::Hash(HashMap::from([(
                     field.clone(),
                     value.clone(),
                 )])));
@@ -267,7 +267,7 @@ impl ReadCommandHandler for command::HVals {
         read_hash(dict, args, |hash| {
             hash.values()
                 .map(|field| field.clone().into())
-                .collect::<Vec<RedisValue>>()
+                .collect::<Vec<Value>>()
                 .into()
         })
     }
@@ -276,14 +276,14 @@ impl ReadCommandHandler for command::HVals {
 fn read_hash<'a, D, F>(dict: &'a D, args: &[Vec<u8>], f: F) -> RedisResult
 where
     D: ReadLockable<'a, Dictionary>,
-    F: Fn(&HashMap<Vec<u8>, Vec<u8>>) -> RedisValue,
+    F: Fn(&HashMap<Vec<u8>, Vec<u8>>) -> Value,
 {
     let [key] = args else {
         return Err(Error::WrongArity);
     };
     match dict.read().get(key) {
-        Some(RedisObject::Hash(hash)) => Ok(f(hash)),
+        Some(Object::Hash(hash)) => Ok(f(hash)),
         Some(_) => Err(Error::WrongType),
-        None => Ok(RedisValue::Array(Vec::new())),
+        None => Ok(Value::Array(Vec::new())),
     }
 }

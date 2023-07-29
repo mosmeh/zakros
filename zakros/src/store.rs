@@ -5,7 +5,7 @@ use std::{cell::RefCell, sync::Arc};
 use zakros_raft::StateMachine;
 use zakros_redis::{
     command::{RedisCommand, WriteCommand},
-    resp::RedisValue,
+    resp::Value,
     Dictionary, RedisResult,
 };
 
@@ -39,7 +39,7 @@ impl StateMachine for Store {
                     };
                     responses.push(response.unwrap());
                 }
-                Ok(RedisValue::Array(responses))
+                Ok(Value::Array(responses))
             }
         }
     }
