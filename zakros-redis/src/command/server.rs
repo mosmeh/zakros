@@ -1,7 +1,7 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, StatelessCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::Error,
+    error::ResponseError,
     lockable::{ReadLockable, RwLockable},
     resp::Value,
     Dictionary, RedisResult,
@@ -18,7 +18,7 @@ impl ReadCommandHandler for command::DbSize {
         if args.is_empty() {
             Ok((dict.read().len() as i64).into())
         } else {
-            Err(Error::WrongArity)
+            Err(ResponseError::WrongArity.into())
         }
     }
 }
@@ -32,7 +32,7 @@ impl StatelessCommandHandler for command::Echo {
     fn call(args: &[Vec<u8>]) -> RedisResult {
         match args {
             [message] => Ok(message.clone().into()),
-            _ => Err(Error::WrongArity),
+            _ => Err(ResponseError::WrongArity.into()),
         }
     }
 }
@@ -74,7 +74,7 @@ impl StatelessCommandHandler for command::Ping {
         match args {
             [] => Ok("PONG".into()),
             [message] => Ok(message.clone().into()),
-            _ => Err(Error::WrongArity),
+            _ => Err(ResponseError::WrongArity.into()),
         }
     }
 }
@@ -87,7 +87,7 @@ impl CommandSpec for command::Time {
 impl StatelessCommandHandler for command::Time {
     fn call(args: &[Vec<u8>]) -> RedisResult {
         if !args.is_empty() {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         }
         let since_epoch = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -104,6 +104,6 @@ fn flush<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> Re
         dict.write().clear();
         Ok(Value::ok())
     } else {
-        Err(Error::WrongArity)
+        Err(ResponseError::WrongArity.into())
     }
 }

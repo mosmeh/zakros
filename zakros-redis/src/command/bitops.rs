@@ -1,7 +1,7 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::Error,
+    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
     BytesExt, Dictionary, Object, RedisResult,
 };
@@ -15,7 +15,7 @@ impl CommandSpec for command::BitCount {
 impl ReadCommandHandler for command::BitCount {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, options @ ..] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let dict = dict.read();
         let s = match dict.get(key) {
@@ -41,9 +41,9 @@ impl ReadCommandHandler for command::BitCount {
                     [indexing] => match indexing.to_ascii_uppercase().as_slice() {
                         b"BYTE" => false,
                         b"BIT" => true,
-                        _ => return Err(Error::SyntaxError),
+                        _ => return Err(ResponseError::SyntaxError.into()),
                     },
-                    _ => return Err(Error::SyntaxError),
+                    _ => return Err(ResponseError::SyntaxError.into()),
                 };
                 let len = if is_bit { s.len() << 3 } else { s.len() } as i64;
                 if start < 0 {
@@ -68,7 +68,7 @@ impl ReadCommandHandler for command::BitCount {
                     (start, end)
                 }
             }
-            _ => return Err(Error::SyntaxError),
+            _ => return Err(ResponseError::SyntaxError.into()),
         };
         let mut count = 0;
         for byte in &s[start..=end] {
@@ -92,21 +92,21 @@ impl CommandSpec for command::BitOp {
 impl WriteCommandHandler for command::BitOp {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let (op, dest_key, keys) = match args {
-            [_op, _dest_key] => return Err(Error::WrongArity),
+            [_op, _dest_key] => return Err(ResponseError::WrongArity.into()),
             [op, dest_key, keys @ ..] => (op, dest_key, keys),
-            _ => return Err(Error::WrongArity),
+            _ => return Err(ResponseError::WrongArity.into()),
         };
         let op = match op.to_ascii_uppercase().as_slice() {
             b"AND" => BitOp::And,
             b"OR" => BitOp::Or,
             b"XOR" => BitOp::Xor,
             b"NOT" => BitOp::Not,
-            _ => return Err(Error::SyntaxError),
+            _ => return Err(ResponseError::SyntaxError.into()),
         };
         if op == BitOp::Not && keys.len() != 1 {
-            return Err(Error::Custom(
-                "ERR BITOP NOT must be called with a single source key.".to_owned(),
-            ));
+            return Err(Error::Response(ResponseError::Other(
+                "BITOP NOT must be called with a single source key.",
+            )));
         }
         let mut sources = Vec::with_capacity(keys.len());
         let mut max_len = 0;
@@ -164,7 +164,7 @@ impl CommandSpec for command::GetBit {
 impl ReadCommandHandler for command::GetBit {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, offset] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let offset = offset.to_u64()?;
         let dict = dict.read();
@@ -190,12 +190,12 @@ impl CommandSpec for command::SetBit {
 impl WriteCommandHandler for command::SetBit {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, offset, value] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let offset = offset.to_u64()?;
         let value = value.to_i64()?;
         if value != 0 && value != 1 {
-            return Err(Error::ValueOutOfRange);
+            return Err(ResponseError::ValueOutOfRange.into());
         }
         let value = value as u8;
         let (byte_index, bit_offset) = decompose_offset(offset as usize);

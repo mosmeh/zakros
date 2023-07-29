@@ -9,7 +9,7 @@ mod string;
 mod transaction;
 
 use crate::{
-    error::Error,
+    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
     Dictionary, RedisResult,
 };
@@ -54,8 +54,8 @@ impl From<RedisCommand> for ParsedCommand {
 impl TryFrom<&[u8]> for ParsedCommand {
     type Error = Error;
 
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        let bytes = &value.to_ascii_uppercase();
+    fn try_from(name: &[u8]) -> Result<Self, Self::Error> {
+        let bytes = &name.to_ascii_uppercase();
         if let Some(command) = WriteCommand::parse(bytes) {
             return Ok(RedisCommand::Write(command).into());
         }
@@ -71,7 +71,7 @@ impl TryFrom<&[u8]> for ParsedCommand {
         if let Some(command) = TransactionCommand::parse(bytes) {
             return Ok(Self::Transaction(command));
         }
-        Err(Error::UnknownCommand)
+        Err(ResponseError::UnknownCommand(String::from_utf8_lossy(name).into_owned()).into())
     }
 }
 
@@ -257,7 +257,6 @@ read_commands! {
 stateless_commands! {
     Echo,
     Ping,
-    Shutdown,
     Time,
 }
 
@@ -267,6 +266,7 @@ connection_commands! {
     ReadOnly,
     ReadWrite,
     Select,
+    Shutdown,
 }
 
 transaction_commands! {

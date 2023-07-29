@@ -1,7 +1,7 @@
-use super::{Arity, CommandSpec, ReadCommandHandler, StatelessCommandHandler, WriteCommandHandler};
+use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::Error,
+    error::ResponseError,
     lockable::{ReadLockable, RwLockable},
     resp::Value,
     Dictionary, Object, RedisResult,
@@ -15,7 +15,7 @@ impl CommandSpec for command::Del {
 impl WriteCommandHandler for command::Del {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         }
         let mut num_deleted = 0;
         let mut dict = dict.write();
@@ -36,7 +36,7 @@ impl CommandSpec for command::Exists {
 impl ReadCommandHandler for command::Exists {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         }
         let mut num_exists = 0;
         let dict = dict.read();
@@ -57,7 +57,7 @@ impl CommandSpec for command::Keys {
 impl ReadCommandHandler for command::Keys {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [pattern] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let keys = dict
             .read()
@@ -77,7 +77,7 @@ impl CommandSpec for command::Rename {
 impl WriteCommandHandler for command::Rename {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, new_key] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut dict = dict.write();
         match dict.remove(key) {
@@ -85,7 +85,7 @@ impl WriteCommandHandler for command::Rename {
                 dict.insert(new_key.clone(), value);
                 Ok(Value::ok())
             }
-            None => Err(Error::NoKey),
+            None => Err(ResponseError::NoKey.into()),
         }
     }
 }
@@ -98,11 +98,11 @@ impl CommandSpec for command::RenameNx {
 impl WriteCommandHandler for command::RenameNx {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, new_key] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut dict = dict.write();
         if !dict.contains_key(key) {
-            return Err(Error::NoKey);
+            return Err(ResponseError::NoKey.into());
         }
         if dict.contains_key(new_key) {
             return Ok(0.into());
@@ -123,13 +123,6 @@ impl CommandSpec for command::Shutdown {
     const ARITY: Arity = Arity::AtLeast(0);
 }
 
-impl StatelessCommandHandler for command::Shutdown {
-    fn call(_: &[Vec<u8>]) -> RedisResult {
-        // TODO: gracefully shutdown
-        std::process::exit(0)
-    }
-}
-
 impl CommandSpec for command::Type {
     const NAME: &'static str = "TYPE";
     const ARITY: Arity = Arity::Fixed(1);
@@ -138,7 +131,7 @@ impl CommandSpec for command::Type {
 impl ReadCommandHandler for command::Type {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let ty = match dict.read().get(key) {
             Some(Object::String(_)) => "string",

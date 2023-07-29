@@ -7,7 +7,7 @@ pub mod session;
 mod string;
 
 use bstr::ByteSlice;
-use error::Error;
+use error::{Error, ResponseError};
 use resp::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -38,24 +38,24 @@ impl<T: AsRef<[u8]>> BytesExt for T {
     fn to_i32(&self) -> Result<i32, Error> {
         self.as_ref()
             .to_str()
-            .map_err(|_| Error::ValueOutOfRange)?
+            .map_err(|_| Error::Response(ResponseError::ValueOutOfRange))?
             .parse()
-            .map_err(|_| Error::ValueOutOfRange)
+            .map_err(|_| Error::Response(ResponseError::ValueOutOfRange))
     }
 
     fn to_i64(&self) -> Result<i64, Error> {
         self.as_ref()
             .to_str()
-            .map_err(|_| Error::NotInteger)?
+            .map_err(|_| Error::Response(ResponseError::NotInteger))?
             .parse()
-            .map_err(|_| Error::NotInteger)
+            .map_err(|_| Error::Response(ResponseError::NotInteger))
     }
 
     fn to_u64(&self) -> Result<u64, Error> {
         self.as_ref()
             .to_str()
-            .map_err(|_| Error::ValueOutOfRange)?
+            .map_err(|_| Error::Response(ResponseError::ValueOutOfRange))?
             .parse()
-            .map_err(|_| Error::ValueOutOfRange)
+            .map_err(|_| Error::Response(ResponseError::ValueOutOfRange))
     }
 }

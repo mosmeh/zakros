@@ -1,7 +1,7 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::Error,
+    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
     resp::Value,
     BytesExt, Dictionary, Object, RedisResult,
@@ -16,7 +16,7 @@ impl CommandSpec for command::Append {
 impl WriteCommandHandler for command::Append {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, value] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
@@ -43,7 +43,7 @@ impl CommandSpec for command::Get {
 impl ReadCommandHandler for command::Get {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         match dict.read().get(key) {
             Some(Object::String(value)) => Ok(value.clone().into()),
@@ -61,7 +61,7 @@ impl CommandSpec for command::GetRange {
 impl ReadCommandHandler for command::GetRange {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, start, end] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut start = start.to_i64()?;
         let mut end = end.to_i64()?;
@@ -98,7 +98,7 @@ impl CommandSpec for command::GetDel {
 impl WriteCommandHandler for command::GetDel {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut dict = dict.write();
         let Entry::Occupied(entry) = dict.entry(key.clone()) else {
@@ -121,7 +121,7 @@ impl CommandSpec for command::GetSet {
 impl WriteCommandHandler for command::GetSet {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, value] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
@@ -147,7 +147,7 @@ impl CommandSpec for command::MGet {
 impl ReadCommandHandler for command::MGet {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         }
         let dict = dict.read();
         let values = args
@@ -169,7 +169,7 @@ impl CommandSpec for command::MSet {
 impl WriteCommandHandler for command::MSet {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() || args.len() % 2 != 0 {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         }
         let mut dict = dict.write();
         for pair in args.chunks_exact(2) {
@@ -188,7 +188,7 @@ impl CommandSpec for command::MSetNx {
 impl WriteCommandHandler for command::MSetNx {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         if args.is_empty() || args.len() % 2 != 0 {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         }
         let mut dict = dict.write();
         for key in args.iter().step_by(2) {
@@ -212,7 +212,7 @@ impl CommandSpec for command::Set {
 impl WriteCommandHandler for command::Set {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, value, options @ ..] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut nx = false;
         let mut xx = false;
@@ -222,11 +222,11 @@ impl WriteCommandHandler for command::Set {
                 b"NX" => nx = true,
                 b"XX" => xx = true,
                 b"GET" => get = true,
-                _ => return Err(Error::SyntaxError),
+                _ => return Err(ResponseError::SyntaxError.into()),
             }
         }
         if nx && xx {
-            return Err(Error::SyntaxError);
+            return Err(ResponseError::SyntaxError.into());
         }
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
@@ -266,7 +266,7 @@ impl CommandSpec for command::SetNx {
 impl WriteCommandHandler for command::SetNx {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, value] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut dict = dict.write();
         let Entry::Vacant(entry) = dict.entry(key.clone()) else {
@@ -285,12 +285,12 @@ impl CommandSpec for command::SetRange {
 impl WriteCommandHandler for command::SetRange {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, offset, value] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let offset = offset
             .to_i64()?
             .try_into()
-            .map_err(|_| Error::ValueOutOfRange)?;
+            .map_err(|_| Error::Response(ResponseError::ValueOutOfRange))?;
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::String(s) = entry.get_mut() else {
@@ -329,7 +329,7 @@ impl CommandSpec for command::StrLen {
 impl ReadCommandHandler for command::StrLen {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         match dict.read().get(key) {
             Some(Object::String(s)) => Ok((s.len() as i64).into()),

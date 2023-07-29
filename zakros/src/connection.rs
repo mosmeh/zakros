@@ -9,10 +9,10 @@ use std::{
 };
 use tokio::{net::TcpStream, sync::TryAcquireError};
 use tokio_util::codec::{FramedRead, FramedWrite};
-use zakros_raft::NodeId;
+use zakros_raft::{Error as RaftError, NodeId};
 use zakros_redis::{
     command::{ConnectionCommand, RedisCommand},
-    error::{ConnectionError, Error},
+    error::{ConnectionError, Error as RedisError, ResponseError},
     resp::{QueryDecoder, ResponseEncoder, Value},
     session::{RedisSession, SessionHandler},
     BytesExt, RedisResult,
@@ -55,8 +55,10 @@ impl RedisConnection {
                     writer.send(value).await?;
                 }
                 Err(ConnectionError::Io(err)) => return Err(err),
-                Err(ConnectionError::Protocol) => {
-                    return writer.send(Err(Error::ProtocolError)).await;
+                Err(ConnectionError::Protocol(err)) => {
+                    return writer
+                        .send(Err(ResponseError::ProtocolError(err).into()))
+                        .await;
                 }
             }
         }
@@ -67,20 +69,19 @@ impl RedisConnection {
         let result = self.session.call(command, args).await;
         match result {
             Ok(value) => value,
-            Err(zakros_raft::Error::NotLeader { leader_id: None }) => {
-                Err(Error::Custom("CLUSTERDOWN No leader".to_owned()))
+            Err(RaftError::NotLeader { leader_id: None }) => {
+                Err(RedisError::ClusterDown("No leader".to_owned()))
             }
-            Err(zakros_raft::Error::NotLeader {
+            Err(RaftError::NotLeader {
                 leader_id: Some(leader_id),
             }) => {
                 let addr = &self.shared.opts.cluster_addrs[Into::<u64>::into(leader_id) as usize];
-                Err(Error::Custom(format!(
-                    "MOVED 0 {}:{}",
-                    addr.ip(),
-                    addr.port()
-                )))
+                Err(RedisError::Moved {
+                    slot: 0,
+                    addr: *addr,
+                })
             }
-            Err(zakros_raft::Error::Shutdown) => panic!("Raft server is shut down"),
+            Err(RaftError::Shutdown) => panic!("Raft server is shut down"),
         }
     }
 }
@@ -124,6 +125,7 @@ impl Handler {
             ConnectionCommand::ReadOnly => Ok(self.handle_readonly(args)),
             ConnectionCommand::ReadWrite => Ok(self.handle_readwrite(args)),
             ConnectionCommand::Select => Ok(self.handle_select(args)),
+            ConnectionCommand::Shutdown => Ok(self.handle_shutdown(args)),
         }
     }
 
@@ -143,7 +145,7 @@ impl Handler {
         }
 
         let [subcommand, _args @ ..] = args else {
-            return Ok(Err(Error::WrongArity));
+            return Ok(Err(ResponseError::WrongArity.into()));
         };
         match subcommand.to_ascii_uppercase().as_slice() {
             b"MYID" => Ok(Ok(format_node_id(NodeId::from(self.shared.opts.id)))),
@@ -151,7 +153,7 @@ impl Handler {
                 const CLUSTER_SLOTS: i64 = 16384;
                 let leader_id = self.shared.raft.status().await?.leader_id;
                 let Some(leader_id) = leader_id else {
-                    return Err(zakros_raft::Error::NotLeader { leader_id: None });
+                    return Err(RaftError::NotLeader { leader_id: None });
                 };
                 let mut response = vec![0.into(), (CLUSTER_SLOTS - 1).into()];
                 let leader_index = Into::<u64>::into(leader_id) as usize;
@@ -167,7 +169,10 @@ impl Handler {
                 Ok(Ok(Value::Array(vec![Value::Array(response)])))
             }
             b"INFO" | b"NODES" => todo!(),
-            _ => Ok(Err(Error::UnknownSubcommand)),
+            _ => Ok(Err(ResponseError::UnknownSubcommand(
+                String::from_utf8_lossy(subcommand).into_owned(),
+            )
+            .into())),
         }
     }
 
@@ -195,7 +200,7 @@ impl Handler {
             self.is_readonly = true;
             Ok(Value::ok())
         } else {
-            Err(Error::WrongArity)
+            Err(ResponseError::WrongArity.into())
         }
     }
 
@@ -204,21 +209,24 @@ impl Handler {
             self.is_readonly = false;
             Ok(Value::ok())
         } else {
-            Err(Error::WrongArity)
+            Err(ResponseError::WrongArity.into())
         }
     }
 
     fn handle_select(&self, args: &[Vec<u8>]) -> RedisResult {
         let [index] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         if index.to_i32()? == 0 {
             Ok(Value::ok())
         } else {
-            Err(Error::Custom(
-                "ERR SELECT is not allowed in cluster mode".to_owned(),
-            ))
+            Err(ResponseError::Other("SELECT is not allowed in cluster mode").into())
         }
+    }
+
+    fn handle_shutdown(&self, _: &[Vec<u8>]) -> RedisResult {
+        // TODO: gracefully shutdown
+        std::process::exit(0)
     }
 }
 
@@ -273,7 +281,7 @@ fn generate_info_str(sections: u8, shared: &SharedState) -> std::io::Result<Vec<
 
 #[async_trait]
 impl SessionHandler for Handler {
-    type Error = zakros_raft::Error;
+    type Error = RaftError;
 
     async fn call(&mut self, command: RedisCommand, args: &[Vec<u8>]) -> RaftResult<RedisResult> {
         match command {

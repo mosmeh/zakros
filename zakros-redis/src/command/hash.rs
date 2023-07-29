@@ -1,7 +1,7 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::Error,
+    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
     resp::Value,
     Dictionary, Object, RedisResult,
@@ -16,9 +16,9 @@ impl CommandSpec for command::HDel {
 impl WriteCommandHandler for command::HDel {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let (key, fields) = match args {
-            [_key] => return Err(Error::WrongArity),
+            [_key] => return Err(ResponseError::WrongArity.into()),
             [key, fields @ ..] => (key, fields),
-            _ => return Err(Error::WrongArity),
+            _ => return Err(ResponseError::WrongArity.into()),
         };
         let mut dict = dict.write();
         let entry = dict.entry(key.clone());
@@ -50,7 +50,7 @@ impl CommandSpec for command::HExists {
 impl ReadCommandHandler for command::HExists {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, field] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         match dict.read().get(key) {
             Some(Object::Hash(hash)) => Ok((hash.contains_key(field) as i64).into()),
@@ -68,7 +68,7 @@ impl CommandSpec for command::HGet {
 impl ReadCommandHandler for command::HGet {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, field] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         match dict.read().get(key) {
             Some(Object::Hash(hash)) => match hash.get(field) {
@@ -134,9 +134,9 @@ impl CommandSpec for command::HMGet {
 impl ReadCommandHandler for command::HMGet {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let (key, fields) = match args {
-            [_key] => return Err(Error::WrongArity),
+            [_key] => return Err(ResponseError::WrongArity.into()),
             [key, fields @ ..] => (key, fields),
-            _ => return Err(Error::WrongArity),
+            _ => return Err(ResponseError::WrongArity.into()),
         };
         match dict.read().get(key) {
             Some(Object::Hash(hash)) => {
@@ -175,7 +175,7 @@ impl CommandSpec for command::HStrLen {
 impl ReadCommandHandler for command::HStrLen {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, field] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         match dict.read().get(key) {
             Some(Object::Hash(hash)) => match hash.get(field) {
@@ -196,9 +196,9 @@ impl CommandSpec for command::HSet {
 impl WriteCommandHandler for command::HSet {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let (key, pairs) = match args {
-            [_key] => return Err(Error::WrongArity),
+            [_key] => return Err(ResponseError::WrongArity.into()),
             [key, pairs @ ..] if pairs.len() % 2 == 0 => (key, pairs),
-            _ => return Err(Error::WrongArity),
+            _ => return Err(ResponseError::WrongArity.into()),
         };
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
@@ -235,7 +235,7 @@ impl CommandSpec for command::HSetNx {
 impl WriteCommandHandler for command::HSetNx {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, field, value] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let was_set = match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
@@ -284,7 +284,7 @@ where
     F: Fn(&HashMap<Vec<u8>, Vec<u8>>) -> Value,
 {
     let [key] = args else {
-        return Err(Error::WrongArity);
+        return Err(ResponseError::WrongArity.into());
     };
     match dict.read().get(key) {
         Some(Object::Hash(hash)) => Ok(f(hash)),

@@ -73,11 +73,8 @@ impl Decoder for QueryDecoder {
     type Error = ConnectionError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        fn parse_bytes<T: FromStr>(s: &[u8]) -> Result<T, ConnectionError> {
-            s.to_str()
-                .map_err(|_| ConnectionError::Protocol)?
-                .parse()
-                .map_err(|_| ConnectionError::Protocol)
+        fn parse_bytes<T: FromStr>(s: &[u8]) -> Result<T, ()> {
+            s.to_str().map_err(|_| ())?.parse().map_err(|_| ())
         }
 
         let mut bytes = &**src;
@@ -86,10 +83,15 @@ impl Decoder for QueryDecoder {
             Some(end) if end + 1 < bytes.len() => end, // if there is a room for trailing \n
             _ => return Ok(None),
         };
-        let len: i64 = match &bytes[..end] {
-            [] => 0,                                           // empty
-            [b'*', len_bytes @ ..] => parse_bytes(len_bytes)?, // array
-            _ => return Err(ConnectionError::Protocol),
+        let len: i32 = match &bytes[..end] {
+            [] => 0, // empty
+            [b'*', len_bytes @ ..] => parse_bytes(len_bytes)
+                .map_err(|_| ConnectionError::Protocol("invalid multibulk length".to_owned()))?, // array
+            _ => {
+                return Err(ConnectionError::Protocol(
+                    "inline protocol is not implemented".to_owned(),
+                ))
+            }
         };
         bytes = &bytes[end + 2..]; // 2 for skipping \r\n
         if len <= 0 {
@@ -105,11 +107,12 @@ impl Decoder for QueryDecoder {
             };
             // expect bulk string
             let [b'$', len_bytes @ ..] = &bytes[..end] else {
-                return Err(ConnectionError::Protocol);
+                return Err(ConnectionError::Protocol(format!("expected '$', got '{}'", char::from(bytes[0]))));
             };
             bytes = &bytes[end + 2..];
 
-            let len: usize = parse_bytes(len_bytes)?;
+            let len: usize = parse_bytes(len_bytes)
+                .map_err(|_| ConnectionError::Protocol("invalid bulk length".to_owned()))?;
             if len + 2 > bytes.len() {
                 return Ok(None);
             }

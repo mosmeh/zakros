@@ -1,7 +1,7 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::Error,
+    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
     resp::Value,
     BytesExt, Dictionary, Object, RedisResult,
@@ -16,7 +16,7 @@ impl CommandSpec for command::LIndex {
 impl ReadCommandHandler for command::LIndex {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, index] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let dict = dict.read();
         let list = match dict.get(key) {
@@ -45,7 +45,7 @@ impl CommandSpec for command::LLen {
 impl ReadCommandHandler for command::LLen {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         match dict.read().get(key) {
             Some(Object::List(list)) => Ok((list.len() as i64).into()),
@@ -96,7 +96,7 @@ impl CommandSpec for command::LRange {
 impl ReadCommandHandler for command::LRange {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, start, stop] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut start = start.to_i64()?;
         let mut stop = stop.to_i64()?;
@@ -135,13 +135,13 @@ impl CommandSpec for command::LSet {
 impl WriteCommandHandler for command::LSet {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, index, element] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut dict = dict.write();
         let list = match dict.get_mut(key) {
             Some(Object::List(list)) => list,
             Some(_) => return Err(Error::WrongType),
-            None => return Err(Error::NoKey),
+            None => return Err(ResponseError::NoKey.into()),
         };
         let mut index = index.to_i64()?;
         if index < 0 {
@@ -153,7 +153,7 @@ impl WriteCommandHandler for command::LSet {
                 return Ok(Value::ok());
             }
         }
-        Err(Error::IndexOutOfRange)
+        Err(ResponseError::IndexOutOfRange.into())
     }
 }
 
@@ -165,7 +165,7 @@ impl CommandSpec for command::LTrim {
 impl WriteCommandHandler for command::LTrim {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [key, start, stop] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut start = start.to_i64()?;
         let mut stop = stop.to_i64()?;
@@ -213,7 +213,7 @@ impl CommandSpec for command::RPopLPush {
 impl WriteCommandHandler for command::RPopLPush {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         let [source, destination] = args else {
-            return Err(Error::WrongArity);
+            return Err(ResponseError::WrongArity.into());
         };
         let mut dict = dict.write();
         match dict.get(destination) {
@@ -276,9 +276,9 @@ where
     F: Fn(&mut VecDeque<Vec<u8>>, Vec<u8>),
 {
     let (key, elements) = match args {
-        [_key] => return Err(Error::WrongArity),
+        [_key] => return Err(ResponseError::WrongArity.into()),
         [key, elements @ ..] => (key, elements),
-        _ => return Err(Error::WrongArity),
+        _ => return Err(ResponseError::WrongArity.into()),
     };
     match dict.write().entry(key.clone()) {
         Entry::Occupied(mut entry) => {
@@ -349,6 +349,6 @@ where
                 Entry::Vacant(_) => Ok(Value::Null),
             }
         }
-        _ => Err(Error::WrongArity),
+        _ => Err(ResponseError::WrongArity.into()),
     }
 }
