@@ -33,6 +33,10 @@ impl WriteCommandHandler for command::HDel {
             if hash.remove(field).is_some() {
                 num_removed += 1;
             }
+            if hash.is_empty() {
+                entry.remove();
+                break;
+            }
         }
         Ok(num_removed.into())
     }
@@ -158,7 +162,8 @@ impl CommandSpec for command::HMSet {
 
 impl WriteCommandHandler for command::HMSet {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
-        command::HSet::call(dict, args)
+        command::HSet::call(dict, args)?;
+        Ok(Value::ok())
     }
 }
 

@@ -143,6 +143,34 @@ impl ReadCommandHandler for command::SMembers {
     }
 }
 
+impl CommandSpec for command::SMIsMember {
+    const NAME: &'static str = "SMISMEMBER";
+    const ARITY: Arity = Arity::AtLeast(2);
+}
+
+impl ReadCommandHandler for command::SMIsMember {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+        let (key, members) = match args {
+            [_key] => return Err(Error::WrongArity),
+            [key, members @ ..] => (key, members),
+            _ => return Err(Error::WrongArity),
+        };
+        let responses = match dict.read().get(key) {
+            Some(hash) => {
+                let Object::Set(hash) = hash else {
+                    return Err(Error::WrongType);
+                };
+                members
+                    .iter()
+                    .map(|member| (hash.contains(member) as i64).into())
+                    .collect()
+            }
+            None => vec![0.into(); members.len()],
+        };
+        Ok(Value::Array(responses))
+    }
+}
+
 impl CommandSpec for command::SMove {
     const NAME: &'static str = "SMOVE";
     const ARITY: Arity = Arity::Fixed(3);
@@ -208,6 +236,9 @@ impl WriteCommandHandler for command::SRem {
             if set.remove(member) {
                 num_removed += 1;
             }
+            if set.is_empty() {
+                break;
+            }
         }
         Ok(num_removed.into())
     }
@@ -240,10 +271,10 @@ where
     D: ReadLockable<'a, Dictionary>,
     F: Fn(&mut HashSet<Vec<u8>>, &HashSet<Vec<u8>>),
 {
-    let [a_key, b_keys @ ..] = args else {
+    let [lhs_key, rhs_keys @ ..] = args else {
         return Err(Error::WrongArity);
     };
-    let values: Vec<Value> = apply(&dict.read(), a_key, b_keys, f)?
+    let values: Vec<Value> = apply(&dict.read(), lhs_key, rhs_keys, f)?
         .into_iter()
         .map(Into::into)
         .collect();
@@ -255,58 +286,63 @@ where
     D: RwLockable<'a, Dictionary>,
     F: Fn(&mut HashSet<Vec<u8>>, &HashSet<Vec<u8>>),
 {
-    let [destination, a_key, b_keys @ ..] = args else {
+    let [destination, lfs_key, rhs_keys @ ..] = args else {
         return Err(Error::WrongArity);
     };
     let mut dict = dict.write();
-    let set = apply(&dict, a_key, b_keys, f)?;
+    let set = apply(&dict, lfs_key, rhs_keys, f)?;
     let len = set.len();
-    dict.insert(destination.clone(), Object::Set(set));
+    if len > 0 {
+        dict.insert(destination.clone(), Object::Set(set));
+    } else {
+        dict.remove(destination);
+    }
     Ok((len as i64).into())
 }
 
 fn apply<F>(
     dict: &Dictionary,
-    a_key: &[u8],
-    b_keys: &[Vec<u8>],
+    lhs_key: &[u8],
+    rhs_keys: &[Vec<u8>],
     f: F,
 ) -> Result<HashSet<Vec<u8>>, Error>
 where
     F: Fn(&mut HashSet<Vec<u8>>, &HashSet<Vec<u8>>),
 {
-    let mut a_set = match dict.get(a_key) {
+    let mut lhs_set = match dict.get(lhs_key) {
         Some(Object::Set(set)) => set.clone(),
         Some(_) => return Err(Error::WrongType),
         None => Default::default(),
     };
-    for b_key in b_keys {
-        match dict.get(b_key) {
-            Some(Object::Set(b_set)) => f(&mut a_set, b_set),
+    for rhs_key in rhs_keys {
+        match dict.get(rhs_key) {
+            Some(Object::Set(rhs_set)) => f(&mut lhs_set, rhs_set),
             Some(_) => return Err(Error::WrongType),
-            None => (),
+            None => f(&mut lhs_set, &HashSet::new()),
         }
     }
-    Ok(a_set)
+    Ok(lhs_set)
 }
 
-fn diff(a: &mut HashSet<Vec<u8>>, b: &HashSet<Vec<u8>>) {
-    if !a.is_empty() {
-        for member in b {
-            a.remove(member);
+fn diff(dest: &mut HashSet<Vec<u8>>, src: &HashSet<Vec<u8>>) {
+    for member in src {
+        if dest.is_empty() {
+            break;
         }
+        dest.remove(member);
     }
 }
 
-fn intersection(a: &mut HashSet<Vec<u8>>, b: &HashSet<Vec<u8>>) {
-    if b.is_empty() {
-        a.clear();
+fn intersection(dest: &mut HashSet<Vec<u8>>, src: &HashSet<Vec<u8>>) {
+    if src.is_empty() {
+        dest.clear();
     } else {
-        a.retain(|member| b.contains(member))
+        dest.retain(|member| src.contains(member))
     }
 }
 
-fn union(a: &mut HashSet<Vec<u8>>, b: &HashSet<Vec<u8>>) {
-    for member in b {
-        a.insert(member.clone());
+fn union(dest: &mut HashSet<Vec<u8>>, src: &HashSet<Vec<u8>>) {
+    for member in src {
+        dest.insert(member.clone());
     }
 }

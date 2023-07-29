@@ -296,6 +296,9 @@ impl WriteCommandHandler for command::SetRange {
                 let Object::String(s) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
+                if value.is_empty() {
+                    return Ok((s.len() as i64).into());
+                }
                 let end = offset + value.len();
                 if end > s.len() {
                     s.resize(end, 0);
@@ -304,6 +307,9 @@ impl WriteCommandHandler for command::SetRange {
                 Ok((s.len() as i64).into())
             }
             Entry::Vacant(entry) => {
+                if value.is_empty() {
+                    return Ok(0.into());
+                }
                 let len = offset + value.len();
                 let mut s = Vec::with_capacity(len);
                 s.resize(offset, 0);

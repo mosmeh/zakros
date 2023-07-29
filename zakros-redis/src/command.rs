@@ -247,6 +247,7 @@ read_commands! {
     SInter,
     SIsMember,
     SMembers,
+    SMIsMember,
     StrLen,
     SubStr,
     SUnion,

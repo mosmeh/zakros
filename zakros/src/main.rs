@@ -4,7 +4,7 @@ mod store;
 
 use clap::Parser;
 use connection::RedisConnection;
-use rpc::{RaftServer, RaftService, RpcHandler};
+use rpc::{RpcHandler, RpcServer, RpcService};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::SystemTime};
 use store::{Command, Store};
 use tarpc::{
@@ -42,21 +42,21 @@ struct Opts {
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::try_init().map_err(anyhow::Error::msg)?;
 
-    let mut args = Opts::parse();
-    if args.cluster_addrs.is_empty() {
-        args.cluster_addrs.push(args.bind_addr);
+    let mut opts = Opts::parse();
+    if opts.cluster_addrs.is_empty() {
+        opts.cluster_addrs.push(opts.bind_addr);
     }
 
-    tokio::runtime::Runtime::new()?.block_on(async { tokio::spawn(serve(args)).await })??;
+    tokio::runtime::Runtime::new()?.block_on(async { tokio::spawn(serve(opts)).await })??;
     Ok(())
 }
 
-async fn is_raft(conn: &mut TcpStream) -> std::io::Result<bool> {
-    let mut buf = [0; RpcHandler::RAFT_MARKER.len()];
+async fn is_rpc(conn: &mut TcpStream) -> std::io::Result<bool> {
+    let mut buf = [0; RpcHandler::RPC_MARKER.len()];
     loop {
         match conn.peek(&mut buf).await {
-            Ok(len) if buf[..len] != RpcHandler::RAFT_MARKER[..len] => return Ok(false),
-            Ok(len) if len == RpcHandler::RAFT_MARKER.len() => {
+            Ok(len) if buf[..len] != RpcHandler::RPC_MARKER[..len] => return Ok(false),
+            Ok(len) if len == RpcHandler::RPC_MARKER.len() => {
                 conn.read_exact(&mut buf).await?;
                 return Ok(true);
             }
@@ -67,26 +67,26 @@ async fn is_raft(conn: &mut TcpStream) -> std::io::Result<bool> {
     }
 }
 
-async fn serve(args: Opts) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(args.bind_addr).await?;
+async fn serve(opts: Opts) -> anyhow::Result<()> {
+    let listener = TcpListener::bind(opts.bind_addr).await?;
     tracing::info!("bound to {}", listener.local_addr()?);
-    let id = NodeId::from(args.id);
-    let shared = Arc::new(SharedState::new(id, args).await);
+    let id = NodeId::from(opts.id);
+    let shared = Arc::new(SharedState::new(id, opts).await);
     loop {
         let (mut conn, addr) = listener.accept().await?;
         tracing::trace!("accepting connection: {}", addr);
         let shared = shared.clone();
         tokio::spawn(async move {
-            let Ok(is_raft) = is_raft(&mut conn).await else {
+            let Ok(is_rpc) = is_rpc(&mut conn).await else {
                 return;
             };
-            if is_raft {
+            if is_rpc {
                 let transport = tarpc::serde_transport::new(
                     LengthDelimitedCodec::builder().new_framed(conn),
                     Bincode::default(),
                 );
                 BaseChannel::with_defaults(transport)
-                    .execute(RaftServer::new(shared).serve())
+                    .execute(RpcServer::new(shared).serve())
                     .await;
             } else {
                 let _ = RedisConnection::new(shared).serve(conn).await;
@@ -116,7 +116,7 @@ impl SharedState {
             PersistentStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string()))
                 .await
                 .unwrap(),
-            Arc::new(RpcHandler(opts.clone())),
+            Arc::new(RpcHandler::new(opts.cluster_addrs.clone())),
         );
         let conn_limit = Arc::new(Semaphore::new(opts.max_num_clients));
         Self {
