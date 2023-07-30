@@ -107,7 +107,10 @@ impl Decoder for QueryDecoder {
             };
             // expect bulk string
             let [b'$', len_bytes @ ..] = &bytes[..end] else {
-                return Err(ConnectionError::Protocol(format!("expected '$', got '{}'", char::from(bytes[0]))));
+                return Err(ConnectionError::Protocol(format!(
+                    "expected '$', got '{}'",
+                    char::from(bytes[0])
+                )));
             };
             bytes = &bytes[end + 2..];
 

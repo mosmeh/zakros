@@ -90,11 +90,14 @@ struct DebugQuery<'a>(&'a [Vec<u8>]);
 
 impl std::fmt::Debug for DebugQuery<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            return f.write_str("(empty)");
+        }
         for s in self.0 {
             if s.len() > 30 {
-                write!(f, "\"{}...\" ", s[..30].as_bstr())?;
+                write!(f, "{:?}... ", s[..30].as_bstr())?;
             } else {
-                write!(f, "\"{}\" ", s.as_bstr())?;
+                write!(f, "{:?} ", s.as_bstr())?;
             }
         }
         Ok(())

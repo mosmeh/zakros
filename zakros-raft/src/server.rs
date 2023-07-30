@@ -83,6 +83,7 @@ where
             current_term,
             voted_for,
         } = storage.load().await.unwrap();
+        tracing::info!("loaded {} entries", storage.num_entries());
         Self {
             node_id: id,
             config,
