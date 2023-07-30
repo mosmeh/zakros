@@ -21,7 +21,7 @@ pub enum RedisCommand {
     Write(WriteCommand),
     Read(ReadCommand),
     Stateless(StatelessCommand),
-    Connection(ConnectionCommand),
+    System(SystemCommand),
 }
 
 impl Display for RedisCommand {
@@ -30,7 +30,7 @@ impl Display for RedisCommand {
             Self::Write(command) => write!(f, "{}", command),
             Self::Read(command) => write!(f, "{}", command),
             Self::Stateless(command) => write!(f, "{}", command),
-            Self::Connection(command) => write!(f, "{}", command),
+            Self::System(command) => write!(f, "{}", command),
         }
     }
 }
@@ -65,8 +65,8 @@ impl TryFrom<&[u8]> for ParsedCommand {
         if let Some(command) = StatelessCommand::parse(bytes) {
             return Ok(RedisCommand::Stateless(command).into());
         }
-        if let Some(command) = ConnectionCommand::parse(bytes) {
-            return Ok(RedisCommand::Connection(command).into());
+        if let Some(command) = SystemCommand::parse(bytes) {
+            return Ok(RedisCommand::System(command).into());
         }
         if let Some(command) = TransactionCommand::parse(bytes) {
             return Ok(Self::Transaction(command));
@@ -81,7 +81,7 @@ impl ParsedCommand {
             Self::Normal(RedisCommand::Write(command)) => command.arity(),
             Self::Normal(RedisCommand::Read(command)) => command.arity(),
             Self::Normal(RedisCommand::Stateless(command)) => command.arity(),
-            Self::Normal(RedisCommand::Connection(command)) => command.arity(),
+            Self::Normal(RedisCommand::System(command)) => command.arity(),
             Self::Transaction(command) => command.arity(),
         }
     }
@@ -173,9 +173,9 @@ macro_rules! stateless_commands {
     }
 }
 
-macro_rules! connection_commands {
+macro_rules! system_commands {
     ($($id:ident,)*) => {
-        commands!(ConnectionCommand, $($id,)*);
+        commands!(SystemCommand, $($id,)*);
     }
 }
 
@@ -260,7 +260,7 @@ stateless_commands! {
     Time,
 }
 
-connection_commands! {
+system_commands! {
     Cluster,
     Info,
     ReadOnly,

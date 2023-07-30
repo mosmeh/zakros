@@ -50,7 +50,7 @@ impl<H: SessionHandler> RedisSession<H> {
                 if matches!(self.txn, Transaction::Inactive) {
                     return self.handler.call(command, args).await;
                 }
-                if let RedisCommand::Connection(_) = command {
+                if let RedisCommand::System(_) = command {
                     self.txn = Transaction::Error;
                     return Ok(Err(ResponseError::Other(
                         "Command not allowed inside a transaction",

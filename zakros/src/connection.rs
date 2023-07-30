@@ -11,7 +11,7 @@ use tokio::{net::TcpStream, sync::TryAcquireError};
 use tokio_util::codec::{FramedRead, FramedWrite};
 use zakros_raft::{Error as RaftError, NodeId};
 use zakros_redis::{
-    command::{ConnectionCommand, RedisCommand},
+    command::{RedisCommand, SystemCommand},
     error::{ConnectionError, Error as RedisError, ResponseError},
     resp::{QueryDecoder, ResponseEncoder, Value},
     session::{RedisSession, SessionHandler},
@@ -109,6 +109,37 @@ struct Handler {
     is_readonly: bool,
 }
 
+#[async_trait]
+impl SessionHandler for Handler {
+    type Error = RaftError;
+
+    async fn call(&mut self, command: RedisCommand, args: &[Vec<u8>]) -> RaftResult<RedisResult> {
+        match command {
+            RedisCommand::Write(command) => {
+                self.shared
+                    .raft
+                    .write(StoreCommand::SingleWrite((command, args.to_vec())))
+                    .await
+            }
+            RedisCommand::Read(command) => {
+                if !self.is_readonly {
+                    self.shared.raft.read().await?;
+                }
+                Ok(command.call(&self.shared.store, args))
+            }
+            RedisCommand::Stateless(command) => Ok(command.call(args)),
+            RedisCommand::System(command) => self.handle_system_command(command, args).await,
+        }
+    }
+
+    async fn exec(
+        &mut self,
+        commands: Vec<(RedisCommand, Vec<Vec<u8>>)>,
+    ) -> RaftResult<RedisResult> {
+        self.shared.raft.write(StoreCommand::Exec(commands)).await
+    }
+}
+
 impl Handler {
     fn new(shared: Arc<SharedState>) -> Self {
         Self {
@@ -117,18 +148,18 @@ impl Handler {
         }
     }
 
-    async fn handle_connection_command(
+    async fn handle_system_command(
         &mut self,
-        command: ConnectionCommand,
+        command: SystemCommand,
         args: &[Vec<u8>],
     ) -> RaftResult<RedisResult> {
         match command {
-            ConnectionCommand::Cluster => self.handle_cluster(args).await,
-            ConnectionCommand::Info => Ok(self.handle_info(args)),
-            ConnectionCommand::ReadOnly => Ok(self.handle_readonly(args)),
-            ConnectionCommand::ReadWrite => Ok(self.handle_readwrite(args)),
-            ConnectionCommand::Select => Ok(self.handle_select(args)),
-            ConnectionCommand::Shutdown => Ok(self.handle_shutdown(args)),
+            SystemCommand::Cluster => self.handle_cluster(args).await,
+            SystemCommand::Info => Ok(self.handle_info(args)),
+            SystemCommand::ReadOnly => Ok(self.handle_readonly(args)),
+            SystemCommand::ReadWrite => Ok(self.handle_readwrite(args)),
+            SystemCommand::Select => Ok(self.handle_select(args)),
+            SystemCommand::Shutdown => Ok(self.handle_shutdown(args)),
         }
     }
 
@@ -158,12 +189,11 @@ impl Handler {
                 let Some(leader_id) = leader_id else {
                     return Err(RaftError::NotLeader { leader_id: None });
                 };
-                let mut responses = vec![Ok(0.into()), Ok((CLUSTER_SLOTS - 1).into())];
                 let leader_index = Into::<u64>::into(leader_id) as usize;
                 let addrs = &self.shared.opts.cluster_addrs;
+                let mut responses = vec![Ok(0.into()), Ok((CLUSTER_SLOTS - 1).into())];
                 responses.reserve(addrs.len());
-                let addr = addrs[leader_index];
-                responses.push(format_node(leader_id, addr));
+                responses.push(format_node(leader_id, addrs[leader_index]));
                 for (i, addr) in addrs.iter().enumerate() {
                     if i != leader_index {
                         responses.push(format_node(NodeId::from(i as u64), *addr));
@@ -279,37 +309,4 @@ fn generate_info_str(sections: u8, shared: &SharedState) -> std::io::Result<Vec<
         write!(out, "cluster_enabled:1\r\n")?;
     }
     Ok(out)
-}
-
-#[async_trait]
-impl SessionHandler for Handler {
-    type Error = RaftError;
-
-    async fn call(&mut self, command: RedisCommand, args: &[Vec<u8>]) -> RaftResult<RedisResult> {
-        match command {
-            RedisCommand::Write(command) => {
-                self.shared
-                    .raft
-                    .write(StoreCommand::SingleWrite((command, args.to_vec())))
-                    .await
-            }
-            RedisCommand::Read(command) => {
-                if !self.is_readonly {
-                    self.shared.raft.read().await?;
-                }
-                Ok(command.call(self.shared.store.as_ref(), args))
-            }
-            RedisCommand::Stateless(command) => Ok(command.call(args)),
-            RedisCommand::Connection(command) => {
-                self.handle_connection_command(command, args).await
-            }
-        }
-    }
-
-    async fn exec(
-        &mut self,
-        commands: Vec<(RedisCommand, Vec<Vec<u8>>)>,
-    ) -> RaftResult<RedisResult> {
-        self.shared.raft.write(StoreCommand::Exec(commands)).await
-    }
 }

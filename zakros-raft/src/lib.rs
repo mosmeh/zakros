@@ -23,7 +23,7 @@ pub struct Raft<C: Command> {
 }
 
 impl<C: Command> Raft<C> {
-    pub fn spawn<M, S, T>(
+    pub fn new<M, S, T>(
         id: NodeId,
         nodes: Vec<NodeId>,
         config: Config,

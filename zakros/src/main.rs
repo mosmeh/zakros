@@ -105,25 +105,29 @@ struct SharedState {
 
 impl SharedState {
     async fn new(node_id: NodeId, opts: Opts) -> Self {
+        let started_at = SystemTime::now();
+        let nodes = (0..opts.cluster_addrs.len() as u64)
+            .map(NodeId::from)
+            .collect();
         let store = Store::new();
-        let raft = Raft::spawn(
+        let storage = PersistentStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string()))
+            .await
+            .unwrap();
+        let rpc_handler = Arc::new(RpcHandler::new(opts.cluster_addrs.clone()));
+        let raft = Raft::new(
             node_id,
-            (0..opts.cluster_addrs.len() as u64)
-                .map(NodeId::from)
-                .collect(),
+            nodes,
             Config::default(),
             store.clone(),
-            PersistentStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string()))
-                .await
-                .unwrap(),
-            Arc::new(RpcHandler::new(opts.cluster_addrs.clone())),
+            storage,
+            rpc_handler,
         );
         let conn_limit = Arc::new(Semaphore::new(opts.max_num_clients));
         Self {
             raft,
             opts,
             store,
-            started_at: SystemTime::now(),
+            started_at,
             conn_limit,
         }
     }

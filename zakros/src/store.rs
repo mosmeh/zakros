@@ -1,10 +1,11 @@
 use async_trait::async_trait;
-use parking_lot::RwLock;
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, sync::Arc};
 use zakros_raft::StateMachine;
 use zakros_redis::{
     command::{RedisCommand, WriteCommand},
+    lockable::RwLockable,
     resp::Value,
     Dictionary, RedisResult,
 };
@@ -18,19 +19,13 @@ impl Store {
     }
 }
 
-impl AsRef<RwLock<Dictionary>> for Store {
-    fn as_ref(&self) -> &RwLock<Dictionary> {
-        &self.0
-    }
-}
-
 #[async_trait]
 impl StateMachine for Store {
     type Command = StoreCommand;
 
     async fn apply(&mut self, command: StoreCommand) -> RedisResult {
         match command {
-            StoreCommand::SingleWrite((command, args)) => command.call(self.as_ref(), &args),
+            StoreCommand::SingleWrite((command, args)) => command.call(self, &args),
             StoreCommand::Exec(queries) => {
                 let mut responses = Vec::with_capacity(queries.len());
                 let dict = RefCell::new(self.0.write());
@@ -39,7 +34,7 @@ impl StateMachine for Store {
                         RedisCommand::Write(command) => command.call(&dict, &args),
                         RedisCommand::Read(command) => command.call(&dict, &args),
                         RedisCommand::Stateless(command) => command.call(&args),
-                        RedisCommand::Connection(_) => {
+                        RedisCommand::System(_) => {
                             unreachable!()
                         }
                     };
@@ -48,6 +43,19 @@ impl StateMachine for Store {
                 Ok(Value::Array(responses))
             }
         }
+    }
+}
+
+impl<'a> RwLockable<'a, Dictionary> for Store {
+    type ReadGuard = RwLockReadGuard<'a, Dictionary>;
+    type WriteGuard = RwLockWriteGuard<'a, Dictionary>;
+
+    fn read(&'a self) -> Self::ReadGuard {
+        self.0.read()
+    }
+
+    fn write(&'a self) -> Self::WriteGuard {
+        self.0.write()
     }
 }
 
