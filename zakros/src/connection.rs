@@ -1,4 +1,4 @@
-use crate::{store::Command, RaftResult, SharedState};
+use crate::{store::StoreCommand, RaftResult, SharedState};
 use async_trait::async_trait;
 use bstr::ByteSlice;
 use futures::{SinkExt, StreamExt};
@@ -133,45 +133,44 @@ impl Handler {
     }
 
     async fn handle_cluster(&self, args: &[Vec<u8>]) -> RaftResult<RedisResult> {
-        fn format_node_id(node_id: NodeId) -> Value {
-            format!("{:0>40x}", Into::<u64>::into(node_id))
+        fn format_node_id(node_id: NodeId) -> RedisResult {
+            Ok(format!("{:0>40x}", Into::<u64>::into(node_id))
                 .into_bytes()
-                .into()
+                .into())
         }
 
-        fn format_node(node_id: NodeId, addr: SocketAddr) -> Value {
-            Value::Array(vec![
-                addr.ip().to_string().into_bytes().into(),
-                (addr.port() as i64).into(),
+        fn format_node(node_id: NodeId, addr: SocketAddr) -> RedisResult {
+            Ok(Value::Array(vec![
+                Ok(addr.ip().to_string().into_bytes().into()),
+                Ok((addr.port() as i64).into()),
                 format_node_id(node_id),
-            ])
+            ]))
         }
 
         let [subcommand, _args @ ..] = args else {
             return Ok(Err(ResponseError::WrongArity.into()));
         };
         match subcommand.to_ascii_uppercase().as_slice() {
-            b"MYID" => Ok(Ok(format_node_id(NodeId::from(self.shared.opts.id)))),
+            b"MYID" => Ok(format_node_id(NodeId::from(self.shared.opts.id))),
             b"SLOTS" => {
                 const CLUSTER_SLOTS: i64 = 16384;
                 let leader_id = self.shared.raft.status().await?.leader_id;
                 let Some(leader_id) = leader_id else {
                     return Err(RaftError::NotLeader { leader_id: None });
                 };
-                let mut response = vec![0.into(), (CLUSTER_SLOTS - 1).into()];
+                let mut responses = vec![Ok(0.into()), Ok((CLUSTER_SLOTS - 1).into())];
                 let leader_index = Into::<u64>::into(leader_id) as usize;
                 let addrs = &self.shared.opts.cluster_addrs;
-                response.reserve(addrs.len());
+                responses.reserve(addrs.len());
                 let addr = addrs[leader_index];
-                response.push(format_node(leader_id, addr));
+                responses.push(format_node(leader_id, addr));
                 for (i, addr) in addrs.iter().enumerate() {
                     if i != leader_index {
-                        response.push(format_node(NodeId::from(i as u64), *addr));
+                        responses.push(format_node(NodeId::from(i as u64), *addr));
                     }
                 }
-                Ok(Ok(Value::Array(vec![Value::Array(response)])))
+                Ok(Ok(Value::Array(vec![Ok(Value::Array(responses))])))
             }
-            b"INFO" | b"NODES" => todo!(),
             _ => Ok(Err(ResponseError::UnknownSubcommand(
                 String::from_utf8_lossy(subcommand).into_owned(),
             )
@@ -291,10 +290,7 @@ impl SessionHandler for Handler {
             RedisCommand::Write(command) => {
                 self.shared
                     .raft
-                    .write(Command::SingleWrite {
-                        command,
-                        args: args.to_vec(),
-                    })
+                    .write(StoreCommand::SingleWrite((command, args.to_vec())))
                     .await
             }
             RedisCommand::Read(command) => {
@@ -314,6 +310,6 @@ impl SessionHandler for Handler {
         &mut self,
         commands: Vec<(RedisCommand, Vec<Vec<u8>>)>,
     ) -> RaftResult<RedisResult> {
-        self.shared.raft.write(Command::Exec(commands)).await
+        self.shared.raft.write(StoreCommand::Exec(commands)).await
     }
 }

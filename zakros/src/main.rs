@@ -6,7 +6,7 @@ use clap::Parser;
 use connection::RedisConnection;
 use rpc::{RpcHandler, RpcServer, RpcService};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::SystemTime};
-use store::{Command, Store};
+use store::{Store, StoreCommand};
 use tarpc::{
     server::{BaseChannel, Channel},
     tokio_serde::formats::Bincode,
@@ -97,7 +97,7 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
 
 struct SharedState {
     opts: Opts,
-    raft: Raft<Command>,
+    raft: Raft<StoreCommand>,
     store: Store,
     started_at: SystemTime,
     conn_limit: Arc<Semaphore>,
@@ -105,7 +105,7 @@ struct SharedState {
 
 impl SharedState {
     async fn new(node_id: NodeId, opts: Opts) -> Self {
-        let store = Store::default();
+        let store = Store::new();
         let raft = Raft::spawn(
             node_id,
             (0..opts.cluster_addrs.len() as u64)

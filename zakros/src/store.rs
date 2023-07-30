@@ -12,6 +12,12 @@ use zakros_redis::{
 #[derive(Clone, Default)]
 pub struct Store(Arc<RwLock<Dictionary>>);
 
+impl Store {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
 impl AsRef<RwLock<Dictionary>> for Store {
     fn as_ref(&self) -> &RwLock<Dictionary> {
         &self.0
@@ -20,12 +26,12 @@ impl AsRef<RwLock<Dictionary>> for Store {
 
 #[async_trait]
 impl StateMachine for Store {
-    type Command = Command;
+    type Command = StoreCommand;
 
-    async fn apply(&mut self, command: Command) -> RedisResult {
+    async fn apply(&mut self, command: StoreCommand) -> RedisResult {
         match command {
-            Command::SingleWrite { command, args } => command.call(self.as_ref(), &args),
-            Command::Exec(queries) => {
+            StoreCommand::SingleWrite((command, args)) => command.call(self.as_ref(), &args),
+            StoreCommand::Exec(queries) => {
                 let mut responses = Vec::with_capacity(queries.len());
                 let dict = RefCell::new(self.0.write());
                 for (command, args) in queries {
@@ -37,7 +43,7 @@ impl StateMachine for Store {
                             unreachable!()
                         }
                     };
-                    responses.push(response.unwrap());
+                    responses.push(response);
                 }
                 Ok(Value::Array(responses))
             }
@@ -46,14 +52,11 @@ impl StateMachine for Store {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Command {
-    SingleWrite {
-        command: WriteCommand,
-        args: Vec<Vec<u8>>,
-    },
+pub enum StoreCommand {
+    SingleWrite((WriteCommand, Vec<Vec<u8>>)),
     Exec(Vec<(RedisCommand, Vec<Vec<u8>>)>),
 }
 
-impl zakros_raft::Command for Command {
+impl zakros_raft::Command for StoreCommand {
     type Output = RedisResult;
 }

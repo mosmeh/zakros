@@ -121,7 +121,7 @@ impl ReadCommandHandler for command::LRange {
             .iter()
             .skip(start as usize)
             .take((stop - start) as usize + 1)
-            .map(|value| value.clone().into())
+            .map(|value| Ok(value.clone().into()))
             .collect();
         Ok(Value::Array(values))
     }
@@ -337,7 +337,7 @@ where
                     let mut values = Vec::with_capacity(count as usize);
                     for _ in 0..count {
                         match f(list) {
-                            Some(value) => values.push(value.into()),
+                            Some(value) => values.push(Ok(value.into())),
                             None => break,
                         }
                     }

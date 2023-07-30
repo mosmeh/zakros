@@ -91,8 +91,8 @@ impl ReadCommandHandler for command::HGetAll {
         read_hash(dict, args, |hash| {
             let mut responses = Vec::with_capacity(hash.len() * 2);
             for (field, value) in hash {
-                responses.push(field.clone().into());
-                responses.push(value.clone().into());
+                responses.push(Ok(field.clone().into()));
+                responses.push(Ok(value.clone().into()));
             }
             Value::Array(responses)
         })
@@ -108,8 +108,8 @@ impl ReadCommandHandler for command::HKeys {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         read_hash(dict, args, |hash| {
             hash.keys()
-                .map(|field| field.clone().into())
-                .collect::<Vec<Value>>()
+                .map(|field| Ok(field.clone().into()))
+                .collect::<Vec<_>>()
                 .into()
         })
     }
@@ -142,15 +142,17 @@ impl ReadCommandHandler for command::HMGet {
             Some(Object::Hash(hash)) => {
                 let values = fields
                     .iter()
-                    .map(|field| match hash.get(field) {
-                        Some(value) => value.clone().into(),
-                        None => Value::Null,
+                    .map(|field| {
+                        Ok(match hash.get(field) {
+                            Some(value) => value.clone().into(),
+                            None => Value::Null,
+                        })
                     })
                     .collect();
                 Ok(Value::Array(values))
             }
             Some(_) => Err(Error::WrongType),
-            None => Ok(vec![Value::Null; fields.len()].into()),
+            None => Ok(vec![Ok(Value::Null); fields.len()].into()),
         }
     }
 }
@@ -271,8 +273,8 @@ impl ReadCommandHandler for command::HVals {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
         read_hash(dict, args, |hash| {
             hash.values()
-                .map(|field| field.clone().into())
-                .collect::<Vec<Value>>()
+                .map(|field| Ok(field.clone().into()))
+                .collect::<Vec<_>>()
                 .into()
         })
     }

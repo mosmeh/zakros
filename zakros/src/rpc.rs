@@ -1,4 +1,4 @@
-use crate::{store::Command, RaftResult, SharedState};
+use crate::{store::StoreCommand, RaftResult, SharedState};
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tarpc::{context::Context, tokio_serde::formats::Bincode};
@@ -28,7 +28,7 @@ impl RpcHandler {
 
 #[async_trait]
 impl Transport for RpcHandler {
-    type Command = Command;
+    type Command = StoreCommand;
     type Error = anyhow::Error;
 
     async fn send_append_entries(
@@ -79,7 +79,9 @@ impl RpcHandler {
 
 #[tarpc::service]
 pub trait RpcService {
-    async fn append_entries(request: AppendEntries<Command>) -> RaftResult<AppendEntriesResponse>;
+    async fn append_entries(
+        request: AppendEntries<StoreCommand>,
+    ) -> RaftResult<AppendEntriesResponse>;
     async fn request_vote(request: RequestVote) -> RaftResult<RequestVoteResponse>;
 }
 
@@ -97,7 +99,7 @@ impl RpcService for RpcServer {
     async fn append_entries(
         self,
         _: Context,
-        request: AppendEntries<Command>,
+        request: AppendEntries<StoreCommand>,
     ) -> RaftResult<AppendEntriesResponse> {
         self.0.raft.append_entries(request).await
     }

@@ -63,7 +63,7 @@ impl ReadCommandHandler for command::Keys {
             .read()
             .keys()
             .filter(|key| crate::string::string_match(pattern, key))
-            .map(|key| key.clone().into())
+            .map(|key| Ok(key.clone().into()))
             .collect();
         Ok(Value::Array(keys))
     }

@@ -25,7 +25,6 @@ impl WriteCommandHandler for command::SAdd {
                 let Object::Set(set) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
-                set.reserve(members.len());
                 let mut num_inserted = 0;
                 for member in members {
                     if set.insert(member.clone()) {
@@ -134,7 +133,7 @@ impl ReadCommandHandler for command::SMembers {
         };
         match dict.read().get(key) {
             Some(Object::Set(set)) => {
-                let members: Vec<Value> = set.iter().map(|member| member.clone().into()).collect();
+                let members: Vec<_> = set.iter().map(|member| Ok(member.clone().into())).collect();
                 Ok(members.into())
             }
             Some(_) => Err(Error::WrongType),
@@ -162,10 +161,10 @@ impl ReadCommandHandler for command::SMIsMember {
                 };
                 members
                     .iter()
-                    .map(|member| (hash.contains(member) as i64).into())
+                    .map(|member| Ok((hash.contains(member) as i64).into()))
                     .collect()
             }
-            None => vec![0.into(); members.len()],
+            None => vec![Ok(0.into()); members.len()],
         };
         Ok(Value::Array(responses))
     }
@@ -274,9 +273,9 @@ where
     let [lhs_key, rhs_keys @ ..] = args else {
         return Err(ResponseError::WrongArity.into());
     };
-    let values: Vec<Value> = apply(&dict.read(), lhs_key, rhs_keys, f)?
+    let values: Vec<_> = apply(&dict.read(), lhs_key, rhs_keys, f)?
         .into_iter()
-        .map(Into::into)
+        .map(|value| Ok(value.into()))
         .collect();
     Ok(values.into())
 }

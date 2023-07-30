@@ -152,9 +152,11 @@ impl ReadCommandHandler for command::MGet {
         let dict = dict.read();
         let values = args
             .iter()
-            .map(|key| match dict.get(key) {
-                Some(Object::String(value)) => value.clone().into(),
-                _ => Value::Null,
+            .map(|key| {
+                Ok(match dict.get(key) {
+                    Some(Object::String(value)) => value.clone().into(),
+                    _ => Value::Null,
+                })
             })
             .collect();
         Ok(Value::Array(values))

@@ -93,8 +93,8 @@ impl StatelessCommandHandler for command::Time {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or(Duration::ZERO);
         Ok(Value::Array(vec![
-            since_epoch.as_secs().to_string().into_bytes().into(),
-            since_epoch.subsec_micros().to_string().into_bytes().into(),
+            Ok(since_epoch.as_secs().to_string().into_bytes().into()),
+            Ok(since_epoch.subsec_micros().to_string().into_bytes().into()),
         ]))
     }
 }
