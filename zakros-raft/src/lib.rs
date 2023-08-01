@@ -1,18 +1,16 @@
+pub mod config;
 pub mod storage;
 pub mod transport;
 
 mod server;
 
 use async_trait::async_trait;
-use rand::{distributions::Uniform, prelude::Distribution};
+use config::Config;
 use serde::{Deserialize, Serialize};
 use server::{Message, Server};
-use std::{fmt::Debug, net::SocketAddr, sync::Arc, time::Duration};
+use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 use storage::Storage;
-use tokio::{
-    sync::{mpsc, oneshot},
-    time::Instant,
-};
+use tokio::sync::{mpsc, oneshot};
 use transport::{
     AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport,
 };
@@ -87,29 +85,6 @@ impl<C: Command> Raft<C> {
             .send(Message::Status(tx))
             .map_err(|_| Error::Shutdown)?;
         rx.await.map_err(|_| Error::Shutdown)
-    }
-}
-
-pub struct Config {
-    pub heartbeat_interval: Duration,
-    pub election_timeout_min: Duration,
-    pub election_timeout_max: Duration,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            heartbeat_interval: Duration::from_millis(200),
-            election_timeout_min: Duration::from_secs(1),
-            election_timeout_max: Duration::from_secs(2),
-        }
-    }
-}
-
-impl Config {
-    fn random_election_deadline(&self) -> Instant {
-        let dist = Uniform::new(self.election_timeout_min, self.election_timeout_max);
-        tokio::time::Instant::now() + dist.sample(&mut rand::thread_rng())
     }
 }
 

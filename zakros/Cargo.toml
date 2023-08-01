@@ -10,7 +10,7 @@ bstr = { version = "1.6.0", default-features = false }
 clap = { version = "4.3.19", features = ["derive"] }
 futures = { version = "0.3.28", default-features = false }
 parking_lot = "0.12.1"
-serde = { version = "1.0.179", features = ["derive"] }
+serde = { version = "1.0.180", features = ["derive"] }
 tarpc = { version = "0.33.0", features = [
 	"serde-transport",
 	"serde-transport-bincode",

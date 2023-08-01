@@ -17,7 +17,7 @@ use tokio::{
     sync::Semaphore,
 };
 use tokio_util::codec::LengthDelimitedCodec;
-use zakros_raft::{storage::PersistentStorage, Config, NodeId, Raft};
+use zakros_raft::{config::Config, storage::PersistentStorage, NodeId, Raft};
 
 type RaftResult<T> = Result<T, zakros_raft::Error>;
 

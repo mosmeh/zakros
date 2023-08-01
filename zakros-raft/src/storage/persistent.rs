@@ -75,10 +75,11 @@ where
         let Some(&offset) = self.offsets.get(index) else {
             return Ok(Vec::new());
         };
+        let num_entries_to_read = self.offsets.len() - index;
         self.flush_writer().await?;
         self.file().seek(SeekFrom::Start(offset)).await?;
         let mut reader = FramedRead::new(self.file(), EntryDecoder::default());
-        let mut entries = Vec::new();
+        let mut entries = Vec::with_capacity(num_entries_to_read);
         while let Some(entry) = reader.next().await {
             entries.push(entry?);
         }
