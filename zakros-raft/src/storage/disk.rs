@@ -11,10 +11,10 @@ use tokio::{
     fs::{File, OpenOptions},
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
 };
-use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
+use tokio_util::codec::{Decoder, Encoder, Framed, FramedRead};
 
 #[derive(Debug, thiserror::Error)]
-pub enum PersistentStorageError {
+pub enum DiskStorageError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -22,21 +22,21 @@ pub enum PersistentStorageError {
     Bincode(#[from] Box<bincode::ErrorKind>),
 }
 
-pub struct PersistentStorage<C> {
+pub struct DiskStorage<C> {
     dir_path: PathBuf,
     dir: Option<File>,
-    writer: FramedWrite<File, EntryEncoder<Entry<C>>>,
+    framed: Framed<File, EntryCodec<C>>,
     offsets: Vec<u64>,
     current_offset: u64,
 }
 
 #[async_trait]
-impl<C> Storage for PersistentStorage<C>
+impl<C> Storage for DiskStorage<C>
 where
     for<'de> C: Command + Serialize + Deserialize<'de>,
 {
     type Command = C;
-    type Error = PersistentStorageError;
+    type Error = DiskStorageError;
 
     async fn load(&mut self) -> Result<Metadata, Self::Error> {
         match File::open(self.dir_path.join("metadata")).await {
@@ -63,10 +63,10 @@ where
         let Some(&offset) = self.offsets.get(index) else {
             return Ok(None);
         };
-        self.flush_writer().await?;
+        self.flush().await?;
         self.file().seek(SeekFrom::Start(offset)).await?;
-        let mut reader = FramedRead::new(self.file(), EntryDecoder::default());
-        reader.next().await.transpose().map_err(Into::into)
+        self.framed.read_buffer_mut().clear();
+        self.framed.next().await.transpose().map_err(Into::into)
     }
 
     async fn entries(&mut self, start: u64) -> Result<Vec<Entry<Self::Command>>, Self::Error> {
@@ -76,11 +76,11 @@ where
             return Ok(Vec::new());
         };
         let num_entries_to_read = self.offsets.len() - index;
-        self.flush_writer().await?;
+        self.flush().await?;
         self.file().seek(SeekFrom::Start(offset)).await?;
-        let mut reader = FramedRead::new(self.file(), EntryDecoder::default());
+        self.framed.read_buffer_mut().clear();
         let mut entries = Vec::with_capacity(num_entries_to_read);
-        while let Some(entry) = reader.next().await {
+        while let Some(entry) = self.framed.next().await {
             entries.push(entry?);
         }
         Ok(entries)
@@ -94,7 +94,7 @@ where
         for entry in entries {
             let size = bincode::DefaultOptions::new().serialized_size(entry)?;
             let offset = self.current_offset;
-            self.writer.feed(EncoderItem { inner: entry, size }).await?;
+            self.framed.feed(EncoderItem { inner: entry, size }).await?;
             self.current_offset += size + HEADER_SIZE as u64;
             self.offsets.push(offset);
         }
@@ -108,7 +108,7 @@ where
         let Some(&offset) = self.offsets.get(index) else {
             return Ok(());
         };
-        self.flush_writer().await?;
+        self.flush().await?;
         self.file().set_len(offset).await?;
         self.offsets.truncate(index);
         self.persist_entries().await?;
@@ -131,14 +131,14 @@ where
     }
 
     async fn persist_entries(&mut self) -> Result<(), Self::Error> {
-        self.flush_writer().await?;
+        self.flush().await?;
         self.file().sync_data().await?;
         Ok(())
     }
 }
 
-impl<C> PersistentStorage<C> {
-    pub async fn new(dir_path: impl Into<PathBuf>) -> Result<Self, PersistentStorageError> {
+impl<C> DiskStorage<C> {
+    pub async fn new(dir_path: impl Into<PathBuf>) -> Result<Self, DiskStorageError> {
         let dir_path = dir_path.into();
         tokio::fs::create_dir_all(&dir_path).await?;
         let dir = File::open(&dir_path).await.ok();
@@ -148,45 +148,47 @@ impl<C> PersistentStorage<C> {
             .write(true)
             .open(dir_path.join("log"))
             .await?;
-        let mut reader = FramedRead::new(&mut file, SizeDecoder::default());
+        let mut size_reader = FramedRead::new(&mut file, SizeDecoder::default());
         let mut offsets = Vec::new();
         let mut current_offset = 0;
-        while let Some(size) = reader.next().await {
+        while let Some(size) = size_reader.next().await {
             offsets.push(current_offset);
             current_offset += size? + HEADER_SIZE as u64;
         }
-        let writer = FramedWrite::new(file, EntryEncoder::default());
+        let framed = Framed::new(file, EntryCodec::default());
         Ok(Self {
             dir_path,
             dir,
-            writer,
+            framed,
             offsets,
             current_offset,
         })
     }
 
     fn file(&mut self) -> &mut File {
-        self.writer.get_mut()
+        self.framed.get_mut()
     }
 }
 
-impl<C: Serialize> PersistentStorage<C> {
-    async fn flush_writer(&mut self) -> Result<(), PersistentStorageError> {
-        if !self.writer.write_buffer().is_empty() {
+impl<C: Serialize> DiskStorage<C> {
+    async fn flush(&mut self) -> Result<(), DiskStorageError> {
+        if !self.framed.write_buffer().is_empty() {
             self.file().seek(SeekFrom::End(0)).await?;
-            self.writer.flush().await?;
+            self.framed.flush().await?;
         }
         Ok(())
     }
 }
 
-struct EntryEncoder<I> {
-    phantom: PhantomData<I>,
+struct EntryCodec<C> {
+    decoder: InnerDecoder,
+    phantom: PhantomData<C>,
 }
 
-impl<I> Default for EntryEncoder<I> {
+impl<C> Default for EntryCodec<C> {
     fn default() -> Self {
         Self {
+            decoder: Default::default(),
             phantom: Default::default(),
         }
     }
@@ -194,18 +196,18 @@ impl<I> Default for EntryEncoder<I> {
 
 const HEADER_SIZE: usize = std::mem::size_of::<u64>();
 
-struct EncoderItem<'a, I> {
-    inner: &'a I,
+struct EncoderItem<'a, C> {
+    inner: &'a Entry<C>,
     size: u64,
 }
 
-impl<I> Encoder<EncoderItem<'_, I>> for EntryEncoder<I>
+impl<C> Encoder<EncoderItem<'_, C>> for EntryCodec<C>
 where
-    I: Serialize,
+    C: Serialize,
 {
     type Error = Box<bincode::ErrorKind>;
 
-    fn encode(&mut self, item: EncoderItem<'_, I>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: EncoderItem<'_, C>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut writer = dst.writer();
         writer.write_u64::<LE>(item.size)?;
         bincode::DefaultOptions::new().serialize_into(writer, item.inner)?;
@@ -213,29 +215,15 @@ where
     }
 }
 
-struct EntryDecoder<I> {
-    inner: InnerDecoder,
-    phantom: PhantomData<I>,
-}
-
-impl<I> Default for EntryDecoder<I> {
-    fn default() -> Self {
-        Self {
-            inner: Default::default(),
-            phantom: Default::default(),
-        }
-    }
-}
-
-impl<I> Decoder for EntryDecoder<I>
+impl<C> Decoder for EntryCodec<C>
 where
-    for<'de> I: Deserialize<'de>,
+    for<'de> C: Deserialize<'de>,
 {
-    type Item = I;
+    type Item = Entry<C>;
     type Error = Box<bincode::ErrorKind>;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        self.inner
+        self.decoder
             .decode(src, |s| bincode::DefaultOptions::new().deserialize_from(s))
     }
 }

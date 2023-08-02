@@ -17,7 +17,7 @@ use tokio::{
     sync::Semaphore,
 };
 use tokio_util::codec::LengthDelimitedCodec;
-use zakros_raft::{config::Config, storage::PersistentStorage, NodeId, Raft};
+use zakros_raft::{config::Config, storage::DiskStorage, NodeId, Raft};
 
 type RaftResult<T> = Result<T, zakros_raft::Error>;
 
@@ -111,7 +111,7 @@ impl Shared {
             .collect();
         let store = Store::new();
         let storage =
-            PersistentStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string())).await?;
+            DiskStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string())).await?;
         let rpc_handler = Arc::new(RpcHandler::new(opts.cluster_addrs.clone()));
         let raft = Raft::new(
             node_id,

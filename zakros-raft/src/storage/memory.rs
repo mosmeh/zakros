@@ -3,22 +3,22 @@ use crate::Command;
 use async_trait::async_trait;
 use std::convert::Infallible;
 
-pub struct VolatileStorage<C>(Vec<Entry<C>>);
+pub struct MemoryStorage<C>(Vec<Entry<C>>);
 
-impl<C> VolatileStorage<C> {
+impl<C> MemoryStorage<C> {
     pub fn new() -> Self {
         Default::default()
     }
 }
 
-impl<C> Default for VolatileStorage<C> {
+impl<C> Default for MemoryStorage<C> {
     fn default() -> Self {
         Self(Default::default())
     }
 }
 
 #[async_trait]
-impl<C: Command> Storage for VolatileStorage<C> {
+impl<C: Command> Storage for MemoryStorage<C> {
     type Command = C;
     type Error = Infallible;
 

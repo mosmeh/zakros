@@ -1,8 +1,8 @@
-mod persistent;
-mod volatile;
+mod disk;
+mod memory;
 
-pub use persistent::{PersistentStorage, PersistentStorageError};
-pub use volatile::VolatileStorage;
+pub use disk::{DiskStorage, DiskStorageError};
+pub use memory::MemoryStorage;
 
 use super::{Entry, Metadata};
 use crate::Command;
