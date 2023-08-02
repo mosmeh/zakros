@@ -1,4 +1,4 @@
-use crate::{store::StoreCommand, RaftResult, SharedState};
+use crate::{store::StoreCommand, RaftResult, Shared};
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tarpc::{context::Context, tokio_serde::formats::Bincode};
@@ -86,10 +86,10 @@ pub trait RpcService {
 }
 
 #[derive(Clone)]
-pub struct RpcServer(Arc<SharedState>);
+pub struct RpcServer(Arc<Shared>);
 
 impl RpcServer {
-    pub(crate) fn new(shared: Arc<SharedState>) -> Self {
+    pub(crate) fn new(shared: Arc<Shared>) -> Self {
         Self(shared)
     }
 }

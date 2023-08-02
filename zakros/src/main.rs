@@ -71,7 +71,7 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
     let listener = TcpListener::bind(opts.bind_addr).await?;
     tracing::info!("bound to {}", listener.local_addr()?);
     let id = NodeId::from(opts.id);
-    let shared = Arc::new(SharedState::new(id, opts).await?);
+    let shared = Arc::new(Shared::new(id, opts).await?);
     loop {
         let (mut conn, addr) = listener.accept().await?;
         tracing::trace!("accepting connection: {}", addr);
@@ -95,7 +95,7 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
     }
 }
 
-struct SharedState {
+struct Shared {
     opts: Opts,
     raft: Raft<StoreCommand>,
     store: Store,
@@ -103,7 +103,7 @@ struct SharedState {
     conn_limit: Arc<Semaphore>,
 }
 
-impl SharedState {
+impl Shared {
     async fn new(node_id: NodeId, opts: Opts) -> anyhow::Result<Self> {
         let started_at = SystemTime::now();
         let nodes = (0..opts.cluster_addrs.len() as u64)

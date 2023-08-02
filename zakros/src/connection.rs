@@ -1,4 +1,4 @@
-use crate::{store::StoreCommand, RaftResult, SharedState};
+use crate::{store::StoreCommand, RaftResult, Shared};
 use async_trait::async_trait;
 use bstr::ByteSlice;
 use futures::{SinkExt, StreamExt};
@@ -14,20 +14,20 @@ use zakros_redis::{
     command::{RedisCommand, SystemCommand},
     error::{ConnectionError, Error as RedisError, ResponseError},
     resp::{QueryDecoder, ResponseEncoder, Value},
-    session::{RedisSession, SessionHandler},
+    session::{Session, SessionHandler},
     BytesExt, RedisResult,
 };
 
 pub struct RedisConnection {
-    shared: Arc<SharedState>,
-    session: RedisSession<Handler>,
+    shared: Arc<Shared>,
+    session: Session<Handler>,
 }
 
 impl RedisConnection {
-    pub(crate) fn new(shared: Arc<SharedState>) -> Self {
+    pub(crate) fn new(shared: Arc<Shared>) -> Self {
         Self {
             shared: shared.clone(),
-            session: RedisSession::new(Handler::new(shared)),
+            session: Session::new(Handler::new(shared)),
         }
     }
 
@@ -105,7 +105,7 @@ impl std::fmt::Debug for DebugQuery<'_> {
 }
 
 struct Handler {
-    shared: Arc<SharedState>,
+    shared: Arc<Shared>,
     is_readonly: bool,
 }
 
@@ -141,7 +141,7 @@ impl SessionHandler for Handler {
 }
 
 impl Handler {
-    fn new(shared: Arc<SharedState>) -> Self {
+    fn new(shared: Arc<Shared>) -> Self {
         Self {
             shared,
             is_readonly: false,
@@ -154,15 +154,35 @@ impl Handler {
         args: &[Vec<u8>],
     ) -> RaftResult<RedisResult> {
         match command {
-            SystemCommand::Cluster => self.handle_cluster(args).await,
-            SystemCommand::Info => Ok(self.handle_info(args)),
+            SystemCommand::Cluster => self.shared.handle_cluster(args).await,
+            SystemCommand::Info => Ok(self.shared.handle_info(args)),
             SystemCommand::ReadOnly => Ok(self.handle_readonly(args)),
             SystemCommand::ReadWrite => Ok(self.handle_readwrite(args)),
-            SystemCommand::Select => Ok(self.handle_select(args)),
-            SystemCommand::Shutdown => Ok(self.handle_shutdown(args)),
+            SystemCommand::Select => Ok(handle_select(args)),
+            SystemCommand::Shutdown => Ok(handle_shutdown(args)),
         }
     }
 
+    fn handle_readonly(&mut self, args: &[Vec<u8>]) -> RedisResult {
+        if args.is_empty() {
+            self.is_readonly = true;
+            Ok(Value::ok())
+        } else {
+            Err(ResponseError::WrongArity.into())
+        }
+    }
+
+    fn handle_readwrite(&mut self, args: &[Vec<u8>]) -> RedisResult {
+        if args.is_empty() {
+            self.is_readonly = false;
+            Ok(Value::ok())
+        } else {
+            Err(ResponseError::WrongArity.into())
+        }
+    }
+}
+
+impl Shared {
     async fn handle_cluster(&self, args: &[Vec<u8>]) -> RaftResult<RedisResult> {
         fn format_node_id(node_id: NodeId) -> RedisResult {
             Ok(format!("{:0>40x}", Into::<u64>::into(node_id))
@@ -182,15 +202,15 @@ impl Handler {
             return Ok(Err(ResponseError::WrongArity.into()));
         };
         match subcommand.to_ascii_uppercase().as_slice() {
-            b"MYID" => Ok(format_node_id(NodeId::from(self.shared.opts.id))),
+            b"MYID" => Ok(format_node_id(NodeId::from(self.opts.id))),
             b"SLOTS" => {
                 const CLUSTER_SLOTS: i64 = 16384;
-                let leader_id = self.shared.raft.status().await?.leader_id;
+                let leader_id = self.raft.status().await?.leader_id;
                 let Some(leader_id) = leader_id else {
                     return Err(RaftError::NotLeader { leader_id: None });
                 };
                 let leader_index = Into::<u64>::into(leader_id) as usize;
-                let addrs = &self.shared.opts.cluster_addrs;
+                let addrs = &self.opts.cluster_addrs;
                 let mut responses = vec![Ok(0.into()), Ok((CLUSTER_SLOTS - 1).into())];
                 responses.reserve(addrs.len());
                 responses.push(format_node(leader_id, addrs[leader_index]));
@@ -224,41 +244,51 @@ impl Handler {
                 }
             }
         }
-        Ok(generate_info_str(sections, &self.shared).unwrap().into())
+        Ok(self.generate_info_str(sections).unwrap().into())
     }
 
-    fn handle_readonly(&mut self, args: &[Vec<u8>]) -> RedisResult {
-        if args.is_empty() {
-            self.is_readonly = true;
-            Ok(Value::ok())
-        } else {
-            Err(ResponseError::WrongArity.into())
+    fn generate_info_str(&self, sections: u8) -> std::io::Result<Vec<u8>> {
+        use std::io::Write;
+
+        let mut out = Vec::new();
+        let mut is_first = true;
+        if sections & SERVER != 0 {
+            is_first = false;
+            out.write_all(b"# Server\r\n")?;
+            write!(out, "tcp_port:{}\r\n", self.opts.bind_addr.port())?;
+            let now = SystemTime::now();
+            let since_epoch = now
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or(Duration::ZERO)
+                .as_micros();
+            let uptime = now
+                .duration_since(self.started_at)
+                .unwrap_or(Duration::ZERO)
+                .as_secs();
+            write!(out, "server_time_usec:{}\r\n", since_epoch)?;
+            write!(out, "uptime_in_seconds:{}\r\n", uptime)?;
+            write!(out, "uptime_in_days:{}\r\n", uptime / (3600 * 24))?;
         }
-    }
-
-    fn handle_readwrite(&mut self, args: &[Vec<u8>]) -> RedisResult {
-        if args.is_empty() {
-            self.is_readonly = false;
-            Ok(Value::ok())
-        } else {
-            Err(ResponseError::WrongArity.into())
+        if sections & CLIENTS != 0 {
+            if !is_first {
+                out.write_all(b"\r\n")?;
+            }
+            out.write_all(b"# Clients\r\n")?;
+            write!(
+                out,
+                "connected_clients:{}\r\n",
+                self.opts.max_num_clients - self.conn_limit.available_permits()
+            )?;
+            write!(out, "maxclients:{}\r\n", self.opts.max_num_clients)?;
         }
-    }
-
-    fn handle_select(&self, args: &[Vec<u8>]) -> RedisResult {
-        let [index] = args else {
-            return Err(ResponseError::WrongArity.into());
-        };
-        if index.to_i32()? == 0 {
-            Ok(Value::ok())
-        } else {
-            Err(ResponseError::Other("SELECT is not allowed in cluster mode").into())
+        if sections & CLUSTER != 0 {
+            if !is_first {
+                out.write_all(b"\r\n")?;
+            }
+            out.write_all(b"# Cluster\r\n")?;
+            write!(out, "cluster_enabled:1\r\n")?;
         }
-    }
-
-    fn handle_shutdown(&self, _: &[Vec<u8>]) -> RedisResult {
-        // TODO: gracefully shutdown
-        std::process::exit(0)
+        Ok(out)
     }
 }
 
@@ -267,46 +297,18 @@ const CLIENTS: u8 = 0x2;
 const CLUSTER: u8 = 0x4;
 const ALL: u8 = SERVER | CLIENTS | CLUSTER;
 
-fn generate_info_str(sections: u8, shared: &SharedState) -> std::io::Result<Vec<u8>> {
-    use std::io::Write;
+fn handle_select(args: &[Vec<u8>]) -> RedisResult {
+    let [index] = args else {
+        return Err(ResponseError::WrongArity.into());
+    };
+    if index.to_i32()? == 0 {
+        Ok(Value::ok())
+    } else {
+        Err(ResponseError::Other("SELECT is not allowed in cluster mode").into())
+    }
+}
 
-    let mut out = Vec::new();
-    let mut is_first = true;
-    if sections & SERVER != 0 {
-        is_first = false;
-        out.write_all(b"# Server\r\n")?;
-        write!(out, "tcp_port:{}\r\n", shared.opts.bind_addr.port())?;
-        let now = SystemTime::now();
-        let since_epoch = now
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or(Duration::ZERO)
-            .as_micros();
-        let uptime = now
-            .duration_since(shared.started_at)
-            .unwrap_or(Duration::ZERO)
-            .as_secs();
-        write!(out, "server_time_usec:{}\r\n", since_epoch)?;
-        write!(out, "uptime_in_seconds:{}\r\n", uptime)?;
-        write!(out, "uptime_in_days:{}\r\n", uptime / (3600 * 24))?;
-    }
-    if sections & CLIENTS != 0 {
-        if !is_first {
-            out.write_all(b"\r\n")?;
-        }
-        out.write_all(b"# Clients\r\n")?;
-        write!(
-            out,
-            "connected_clients:{}\r\n",
-            shared.opts.max_num_clients - shared.conn_limit.available_permits()
-        )?;
-        write!(out, "maxclients:{}\r\n", shared.opts.max_num_clients)?;
-    }
-    if sections & CLUSTER != 0 {
-        if !is_first {
-            out.write_all(b"\r\n")?;
-        }
-        out.write_all(b"# Cluster\r\n")?;
-        write!(out, "cluster_enabled:1\r\n")?;
-    }
-    Ok(out)
+fn handle_shutdown(_: &[Vec<u8>]) -> RedisResult {
+    // TODO: gracefully shutdown
+    std::process::exit(0)
 }

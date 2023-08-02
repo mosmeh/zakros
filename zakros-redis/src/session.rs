@@ -7,12 +7,12 @@ use crate::{
 use async_trait::async_trait;
 
 #[derive(Default)]
-pub struct RedisSession<H> {
+pub struct Session<H> {
     handler: H,
     txn: Transaction,
 }
 
-impl<H: SessionHandler> RedisSession<H> {
+impl<H: SessionHandler> Session<H> {
     pub const fn new(handler: H) -> Self {
         Self {
             handler,
