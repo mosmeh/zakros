@@ -23,6 +23,7 @@ pub enum RedisCommand {
     Read(ReadCommand),
     Stateless(StatelessCommand),
     System(SystemCommand),
+    Transaction(TransactionCommand),
 }
 
 impl Display for RedisCommand {
@@ -32,42 +33,27 @@ impl Display for RedisCommand {
             Self::Read(command) => write!(f, "{}", command),
             Self::Stateless(command) => write!(f, "{}", command),
             Self::System(command) => write!(f, "{}", command),
+            Self::Transaction(command) => write!(f, "{}", command),
         }
     }
 }
 
-pub(crate) enum Arity {
-    Fixed(usize),
-    AtLeast(usize),
-}
-
-pub(crate) enum ParsedCommand {
-    Normal(RedisCommand),
-    Transaction(TransactionCommand),
-}
-
-impl From<RedisCommand> for ParsedCommand {
-    fn from(value: RedisCommand) -> Self {
-        Self::Normal(value)
-    }
-}
-
-impl TryFrom<&[u8]> for ParsedCommand {
+impl TryFrom<&[u8]> for RedisCommand {
     type Error = Error;
 
     fn try_from(name: &[u8]) -> Result<Self, Self::Error> {
         let bytes = &name.to_ascii_uppercase();
         if let Some(command) = WriteCommand::parse(bytes) {
-            return Ok(RedisCommand::Write(command).into());
+            return Ok(Self::Write(command));
         }
         if let Some(command) = ReadCommand::parse(bytes) {
-            return Ok(RedisCommand::Read(command).into());
+            return Ok(Self::Read(command));
         }
         if let Some(command) = StatelessCommand::parse(bytes) {
-            return Ok(RedisCommand::Stateless(command).into());
+            return Ok(Self::Stateless(command));
         }
         if let Some(command) = SystemCommand::parse(bytes) {
-            return Ok(RedisCommand::System(command).into());
+            return Ok(Self::System(command));
         }
         if let Some(command) = TransactionCommand::parse(bytes) {
             return Ok(Self::Transaction(command));
@@ -76,16 +62,21 @@ impl TryFrom<&[u8]> for ParsedCommand {
     }
 }
 
-impl ParsedCommand {
+impl RedisCommand {
     pub const fn arity(&self) -> Arity {
         match self {
-            Self::Normal(RedisCommand::Write(command)) => command.arity(),
-            Self::Normal(RedisCommand::Read(command)) => command.arity(),
-            Self::Normal(RedisCommand::Stateless(command)) => command.arity(),
-            Self::Normal(RedisCommand::System(command)) => command.arity(),
+            Self::Write(command) => command.arity(),
+            Self::Read(command) => command.arity(),
+            Self::Stateless(command) => command.arity(),
+            Self::System(command) => command.arity(),
             Self::Transaction(command) => command.arity(),
         }
     }
+}
+
+pub enum Arity {
+    Fixed(usize),
+    AtLeast(usize),
 }
 
 macro_rules! commands {

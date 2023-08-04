@@ -3,7 +3,6 @@ mod rpc;
 mod store;
 
 use clap::Parser;
-use connection::RedisConnection;
 use rpc::{RpcHandler, RpcServer, RpcService};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::SystemTime};
 use store::{Store, StoreCommand};
@@ -89,7 +88,7 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
                     .execute(RpcServer::new(shared).serve())
                     .await;
             } else {
-                let _ = RedisConnection::new(shared).serve(conn).await;
+                let _ = connection::serve(shared, conn).await;
             }
         });
     }

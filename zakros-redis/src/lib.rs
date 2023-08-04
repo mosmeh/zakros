@@ -2,7 +2,6 @@ pub mod command;
 pub mod error;
 pub mod lockable;
 pub mod resp;
-pub mod session;
 
 mod string;
 

@@ -35,7 +35,7 @@ impl StateMachine for Store {
                         RedisCommand::Write(command) => command.call(&dict, &args),
                         RedisCommand::Read(command) => command.call(&dict, &args),
                         RedisCommand::Stateless(command) => command.call(&args),
-                        RedisCommand::System(_) => {
+                        RedisCommand::System(_) | RedisCommand::Transaction(_) => {
                             unreachable!()
                         }
                     };

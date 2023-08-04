@@ -1,5 +1,4 @@
 use crate::{store::StoreCommand, RaftResult, Shared};
-use async_trait::async_trait;
 use bstr::ByteSlice;
 use bytes::Bytes;
 use futures::{SinkExt, StreamExt};
@@ -12,50 +11,54 @@ use tokio::{net::TcpStream, sync::TryAcquireError};
 use tokio_util::codec::Framed;
 use zakros_raft::{Error as RaftError, NodeId};
 use zakros_redis::{
-    command::{RedisCommand, SystemCommand},
+    command::{Arity, RedisCommand, SystemCommand, TransactionCommand},
     error::{ConnectionError, Error as RedisError, ResponseError},
     resp::{RespCodec, Value},
-    session::{Session, SessionHandler},
     BytesExt, RedisResult,
 };
 
-pub struct RedisConnection {
+pub(crate) async fn serve(shared: Arc<Shared>, mut conn: TcpStream) -> std::io::Result<()> {
+    match shared.conn_limit.clone().try_acquire_owned() {
+        Ok(_permit) => RedisConnection::new(shared, conn).serve().await,
+        Err(TryAcquireError::Closed) => unreachable!(),
+        Err(TryAcquireError::NoPermits) => {
+            use tokio::io::AsyncWriteExt;
+            conn.write_all(b"-ERR max number of clients reached").await
+        }
+    }
+}
+
+struct RedisConnection {
     shared: Arc<Shared>,
-    session: Session<Handler>,
+    framed: Framed<TcpStream, RespCodec>,
+    txn: Transaction,
+    is_readonly: bool,
 }
 
 impl RedisConnection {
-    pub(crate) fn new(shared: Arc<Shared>) -> Self {
+    pub(crate) fn new(shared: Arc<Shared>, conn: TcpStream) -> Self {
         Self {
             shared: shared.clone(),
-            session: Session::new(Handler::new(shared)),
+            framed: Framed::new(conn, RespCodec::default()),
+            txn: Transaction::Inactive,
+            is_readonly: false,
         }
     }
 
-    pub async fn serve(mut self, mut conn: TcpStream) -> std::io::Result<()> {
-        let _permit = match self.shared.conn_limit.clone().try_acquire_owned() {
-            Ok(permit) => permit,
-            Err(TryAcquireError::Closed) => unreachable!(),
-            Err(TryAcquireError::NoPermits) => {
-                use tokio::io::AsyncWriteExt;
-                return conn.write_all(b"-ERR max number of clients reached").await;
-            }
-        };
-
-        let mut framed = Framed::new(conn, RespCodec::default());
-        while let Some(decoded) = framed.next().await {
+    pub async fn serve(mut self) -> std::io::Result<()> {
+        while let Some(decoded) = self.framed.next().await {
             match decoded {
                 Ok(strings) => {
                     tracing::trace!("received {:?}", DebugQuery(&strings));
                     let Some((command, args)) = strings.split_first() else {
                         continue;
                     };
-                    let value = self.call(command, args).await;
-                    framed.send(&value).await?;
+                    self.handle_command(command, args).await?;
                 }
                 Err(ConnectionError::Io(err)) => return Err(err),
                 Err(ConnectionError::Protocol(err)) => {
-                    return framed
+                    return self
+                        .framed
                         .send(&Err(ResponseError::ProtocolError(err).into()))
                         .await;
                 }
@@ -64,25 +67,187 @@ impl RedisConnection {
         Ok(())
     }
 
-    async fn call(&mut self, command: &[u8], args: &[Bytes]) -> RedisResult {
-        let result = self.session.call(command, args).await;
-        match result {
-            Ok(value) => value,
-            Err(RaftError::NotLeader { leader_id: None }) => {
-                Err(RedisError::ClusterDown("No leader".to_owned()))
-            }
-            Err(RaftError::NotLeader {
-                leader_id: Some(leader_id),
-            }) => {
-                let addr = &self.shared.opts.cluster_addrs[Into::<u64>::into(leader_id) as usize];
-                Err(RedisError::Moved {
-                    slot: 0,
-                    addr: *addr,
-                })
-            }
-            Err(RaftError::Shutdown) => panic!("Raft server is shut down"),
+    async fn handle_command(&mut self, command: &[u8], args: &[Bytes]) -> std::io::Result<()> {
+        match self.parse_and_process_command(command, args).await {
+            Ok(()) => Ok(()),
+            Err(Error::Io(err)) => Err(err),
+            Err(Error::Redis(err)) => self.framed.send(&Err(err)).await,
+            Err(Error::Raft(err)) => match err {
+                RaftError::NotLeader { leader_id: None } => {
+                    self.framed
+                        .send(&Err(RedisError::ClusterDown("No leader".to_owned())))
+                        .await
+                }
+                RaftError::NotLeader {
+                    leader_id: Some(leader_id),
+                } => {
+                    let addr =
+                        &self.shared.opts.cluster_addrs[Into::<u64>::into(leader_id) as usize];
+                    self.framed
+                        .send(&Err(RedisError::Moved {
+                            slot: 0,
+                            addr: *addr,
+                        }))
+                        .await
+                }
+                RaftError::Shutdown => panic!("Raft server is shut down"),
+            },
         }
     }
+
+    async fn parse_and_process_command(
+        &mut self,
+        command: &[u8],
+        args: &[Bytes],
+    ) -> Result<(), Error> {
+        let command = match RedisCommand::try_from(command) {
+            Ok(command) => command,
+            Err(err) => {
+                if matches!(self.txn, Transaction::Queued(_)) {
+                    self.txn = Transaction::Error;
+                }
+                return Err(err.into());
+            }
+        };
+        match command.arity() {
+            Arity::Fixed(n) if args.len() == n => (),
+            Arity::AtLeast(n) if args.len() >= n => (),
+            _ => {
+                if matches!(self.txn, Transaction::Queued(_)) {
+                    self.txn = Transaction::Error;
+                }
+                return Err(RedisError::from(ResponseError::WrongArity).into());
+            }
+        }
+
+        match command {
+            RedisCommand::Transaction(command) => match command {
+                TransactionCommand::Multi => match self.txn {
+                    Transaction::Inactive => {
+                        self.txn = Transaction::Queued(Default::default());
+                        self.framed.send(&Ok(Value::ok())).await?;
+                        Ok(())
+                    }
+                    Transaction::Queued(_) | Transaction::Error => Err(RedisError::from(
+                        ResponseError::Other("MULTI calls can not be nested"),
+                    )
+                    .into()),
+                },
+                TransactionCommand::Exec => match &mut self.txn {
+                    Transaction::Inactive => {
+                        Err(RedisError::from(ResponseError::Other("EXEC without MULTI")).into())
+                    }
+                    Transaction::Queued(queue) => {
+                        let commands = std::mem::take(queue);
+                        self.txn = Transaction::Inactive;
+                        self.exec(commands).await
+                    }
+                    Transaction::Error => {
+                        self.txn = Transaction::Inactive;
+                        Err(RedisError::ExecAbort.into())
+                    }
+                },
+                TransactionCommand::Discard => match self.txn {
+                    Transaction::Inactive => {
+                        Err(RedisError::from(ResponseError::Other("DISCARD without MULTI")).into())
+                    }
+                    Transaction::Queued(_) | Transaction::Error => {
+                        self.txn = Transaction::Inactive;
+                        self.framed.send(&Ok(Value::ok())).await?;
+                        Ok(())
+                    }
+                },
+            },
+            RedisCommand::System(_) if !matches!(self.txn, Transaction::Inactive) => {
+                self.txn = Transaction::Error;
+                Err(RedisError::from(ResponseError::Other(
+                    "Command not allowed inside a transaction",
+                ))
+                .into())
+            }
+            _ if !matches!(self.txn, Transaction::Inactive) => {
+                if let Transaction::Queued(queue) = &mut self.txn {
+                    queue.push((command, args.to_vec()));
+                }
+                self.framed.send(&Ok("QUEUED".into())).await?;
+                Ok(())
+            }
+            _ => self.call_single(command, args).await,
+        }
+    }
+
+    async fn call_single(&mut self, command: RedisCommand, args: &[Bytes]) -> Result<(), Error> {
+        let result = match command {
+            RedisCommand::Write(command) => {
+                self.shared
+                    .raft
+                    .write(StoreCommand::SingleWrite((command, args.to_vec())))
+                    .await?
+            }
+            RedisCommand::Read(command) => {
+                if !self.is_readonly {
+                    self.shared.raft.read().await?;
+                }
+                command.call(&self.shared.store, args)
+            }
+            RedisCommand::Stateless(command) => command.call(args),
+            RedisCommand::System(command) => match command {
+                SystemCommand::Cluster => self.shared.cluster(args).await?,
+                SystemCommand::Info => self.shared.info(args),
+                SystemCommand::ReadOnly => self.readonly(args),
+                SystemCommand::ReadWrite => self.readwrite(args),
+                SystemCommand::Select => select(args),
+                SystemCommand::Shutdown => shutdown(args),
+            },
+            RedisCommand::Transaction(_) => unreachable!(),
+        };
+        self.framed.send(&result).await?;
+        Ok(())
+    }
+
+    async fn exec(&mut self, commands: Vec<(RedisCommand, Vec<Bytes>)>) -> Result<(), Error> {
+        let result = self.shared.raft.write(StoreCommand::Exec(commands)).await?;
+        self.framed.send(&result).await?;
+        Ok(())
+    }
+
+    fn readonly(&mut self, args: &[Bytes]) -> RedisResult {
+        if args.is_empty() {
+            self.is_readonly = true;
+            Ok(Value::ok())
+        } else {
+            Err(ResponseError::WrongArity.into())
+        }
+    }
+
+    fn readwrite(&mut self, args: &[Bytes]) -> RedisResult {
+        if args.is_empty() {
+            self.is_readonly = false;
+            Ok(Value::ok())
+        } else {
+            Err(ResponseError::WrongArity.into())
+        }
+    }
+}
+
+#[derive(Default)]
+enum Transaction {
+    #[default]
+    Inactive,
+    Queued(Vec<(RedisCommand, Vec<Bytes>)>),
+    Error,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Redis(#[from] RedisError),
+
+    #[error(transparent)]
+    Raft(#[from] RaftError),
 }
 
 struct DebugQuery<'a>(&'a [Bytes]);
@@ -103,83 +268,8 @@ impl std::fmt::Debug for DebugQuery<'_> {
     }
 }
 
-struct Handler {
-    shared: Arc<Shared>,
-    is_readonly: bool,
-}
-
-#[async_trait]
-impl SessionHandler for Handler {
-    type Error = RaftError;
-
-    async fn call(&mut self, command: RedisCommand, args: &[Bytes]) -> RaftResult<RedisResult> {
-        match command {
-            RedisCommand::Write(command) => {
-                self.shared
-                    .raft
-                    .write(StoreCommand::SingleWrite((command, args.to_vec())))
-                    .await
-            }
-            RedisCommand::Read(command) => {
-                if !self.is_readonly {
-                    self.shared.raft.read().await?;
-                }
-                Ok(command.call(&self.shared.store, args))
-            }
-            RedisCommand::Stateless(command) => Ok(command.call(args)),
-            RedisCommand::System(command) => self.handle_system_command(command, args).await,
-        }
-    }
-
-    async fn exec(&mut self, commands: Vec<(RedisCommand, Vec<Bytes>)>) -> RaftResult<RedisResult> {
-        self.shared.raft.write(StoreCommand::Exec(commands)).await
-    }
-}
-
-impl Handler {
-    fn new(shared: Arc<Shared>) -> Self {
-        Self {
-            shared,
-            is_readonly: false,
-        }
-    }
-
-    async fn handle_system_command(
-        &mut self,
-        command: SystemCommand,
-        args: &[Bytes],
-    ) -> RaftResult<RedisResult> {
-        match command {
-            SystemCommand::Cluster => self.shared.handle_cluster(args).await,
-            SystemCommand::Info => Ok(self.shared.handle_info(args)),
-            SystemCommand::ReadOnly => Ok(self.handle_readonly(args)),
-            SystemCommand::ReadWrite => Ok(self.handle_readwrite(args)),
-            SystemCommand::Select => Ok(handle_select(args)),
-            SystemCommand::Shutdown => Ok(handle_shutdown(args)),
-        }
-    }
-
-    fn handle_readonly(&mut self, args: &[Bytes]) -> RedisResult {
-        if args.is_empty() {
-            self.is_readonly = true;
-            Ok(Value::ok())
-        } else {
-            Err(ResponseError::WrongArity.into())
-        }
-    }
-
-    fn handle_readwrite(&mut self, args: &[Bytes]) -> RedisResult {
-        if args.is_empty() {
-            self.is_readonly = false;
-            Ok(Value::ok())
-        } else {
-            Err(ResponseError::WrongArity.into())
-        }
-    }
-}
-
 impl Shared {
-    async fn handle_cluster(&self, args: &[Bytes]) -> RaftResult<RedisResult> {
+    async fn cluster(&self, args: &[Bytes]) -> RaftResult<RedisResult> {
         fn format_node_id(node_id: NodeId) -> RedisResult {
             Ok(Bytes::from(format!("{:0>40x}", Into::<u64>::into(node_id)).into_bytes()).into())
         }
@@ -222,7 +312,7 @@ impl Shared {
         }
     }
 
-    fn handle_info(&self, args: &[Bytes]) -> RedisResult {
+    fn info(&self, args: &[Bytes]) -> RedisResult {
         let mut sections;
         if args.is_empty() {
             sections = ALL;
@@ -291,7 +381,7 @@ const CLIENTS: u8 = 0x2;
 const CLUSTER: u8 = 0x4;
 const ALL: u8 = SERVER | CLIENTS | CLUSTER;
 
-fn handle_select(args: &[Bytes]) -> RedisResult {
+fn select(args: &[Bytes]) -> RedisResult {
     let [index] = args else {
         return Err(ResponseError::WrongArity.into());
     };
@@ -302,7 +392,7 @@ fn handle_select(args: &[Bytes]) -> RedisResult {
     }
 }
 
-fn handle_shutdown(_: &[Bytes]) -> RedisResult {
+fn shutdown(_: &[Bytes]) -> RedisResult {
     // TODO: gracefully shutdown
     std::process::exit(0)
 }
