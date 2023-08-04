@@ -13,6 +13,7 @@ use crate::{
     lockable::{ReadLockable, RwLockable},
     Dictionary, RedisResult,
 };
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
@@ -131,7 +132,7 @@ macro_rules! write_commands {
             pub fn call<'a, D: RwLockable<'a, Dictionary>>(
                 &self,
                 dict: &'a D,
-                args: &[Vec<u8>],
+                args: &[Bytes],
             ) -> RedisResult {
                 match self {
                     $(Self::$id => $id::call(dict, args),)*
@@ -149,7 +150,7 @@ macro_rules! read_commands {
             pub fn call<'a, D: ReadLockable<'a, Dictionary>>(
                 &self,
                 dict: &'a D,
-                args: &[Vec<u8>],
+                args: &[Bytes],
             ) -> RedisResult {
                 match self {
                     $(Self::$id => $id::call(dict, args),)*
@@ -164,7 +165,7 @@ macro_rules! stateless_commands {
         commands!(StatelessCommand, $($id,)*);
 
         impl StatelessCommand {
-            pub fn call(&self, args: &[Vec<u8>]) -> RedisResult {
+            pub fn call(&self, args: &[Bytes]) -> RedisResult {
                 match self {
                     $(Self::$id => $id::call(args),)*
                 }
@@ -281,13 +282,13 @@ trait CommandSpec {
 }
 
 trait WriteCommandHandler: CommandSpec {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult;
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult;
 }
 
 trait ReadCommandHandler: CommandSpec {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult;
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult;
 }
 
 trait StatelessCommandHandler: CommandSpec {
-    fn call(args: &[Vec<u8>]) -> RedisResult;
+    fn call(args: &[Bytes]) -> RedisResult;
 }

@@ -7,6 +7,7 @@ pub mod session;
 mod string;
 
 use bstr::ByteSlice;
+use bytes::Bytes;
 use error::{Error, ResponseError};
 use resp::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -15,9 +16,9 @@ pub type RedisResult = Result<Value, Error>;
 
 pub enum Object {
     String(Vec<u8>),
-    List(VecDeque<Vec<u8>>),
-    Set(HashSet<Vec<u8>>),
-    Hash(HashMap<Vec<u8>, Vec<u8>>),
+    List(VecDeque<Bytes>),
+    Set(HashSet<Bytes>),
+    Hash(HashMap<Bytes, Bytes>),
 }
 
 impl From<Vec<u8>> for Object {
@@ -26,7 +27,7 @@ impl From<Vec<u8>> for Object {
     }
 }
 
-pub type Dictionary = HashMap<Vec<u8>, Object>;
+pub type Dictionary = HashMap<Bytes, Object>;
 
 pub trait BytesExt {
     fn to_i32(&self) -> Result<i32, Error>;

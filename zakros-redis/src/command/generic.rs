@@ -6,6 +6,7 @@ use crate::{
     resp::Value,
     Dictionary, Object, RedisResult,
 };
+use bytes::Bytes;
 
 impl CommandSpec for command::Del {
     const NAME: &'static str = "DEL";
@@ -13,7 +14,7 @@ impl CommandSpec for command::Del {
 }
 
 impl WriteCommandHandler for command::Del {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         if args.is_empty() {
             return Err(ResponseError::WrongArity.into());
         }
@@ -34,7 +35,7 @@ impl CommandSpec for command::Exists {
 }
 
 impl ReadCommandHandler for command::Exists {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         if args.is_empty() {
             return Err(ResponseError::WrongArity.into());
         }
@@ -55,7 +56,7 @@ impl CommandSpec for command::Keys {
 }
 
 impl ReadCommandHandler for command::Keys {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [pattern] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -75,7 +76,7 @@ impl CommandSpec for command::Rename {
 }
 
 impl WriteCommandHandler for command::Rename {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, new_key] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -96,7 +97,7 @@ impl CommandSpec for command::RenameNx {
 }
 
 impl WriteCommandHandler for command::RenameNx {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, new_key] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -129,7 +130,7 @@ impl CommandSpec for command::Type {
 }
 
 impl ReadCommandHandler for command::Type {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key] = args else {
             return Err(ResponseError::WrongArity.into());
         };

@@ -1,6 +1,6 @@
 use crate::{error::ConnectionError, RedisResult};
 use bstr::ByteSlice;
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{fmt::Debug, io::Write, str::FromStr};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -8,7 +8,7 @@ use tokio_util::codec::{Decoder, Encoder};
 pub enum Value {
     Null,
     SimpleString(&'static str),
-    BulkString(Vec<u8>),
+    BulkString(Bytes),
     Integer(i64),
     Array(Vec<RedisResult>),
 }
@@ -19,8 +19,8 @@ impl From<&'static str> for Value {
     }
 }
 
-impl From<Vec<u8>> for Value {
-    fn from(value: Vec<u8>) -> Self {
+impl From<Bytes> for Value {
+    fn from(value: Bytes) -> Self {
         Self::BulkString(value)
     }
 }
@@ -66,10 +66,14 @@ impl Value {
     }
 }
 
-pub struct QueryDecoder;
+#[derive(Default)]
+pub struct RespCodec {
+    array_len: Option<usize>,
+    array: Vec<Bytes>,
+}
 
-impl Decoder for QueryDecoder {
-    type Item = Vec<Vec<u8>>;
+impl Decoder for RespCodec {
+    type Item = Vec<Bytes>;
     type Error = ConnectionError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -77,64 +81,69 @@ impl Decoder for QueryDecoder {
             s.to_str().map_err(|_| ())?.parse().map_err(|_| ())
         }
 
-        let mut bytes = &**src;
+        let array_len = match self.array_len {
+            None => {
+                let end = match src.find_byte(b'\r') {
+                    Some(end) if end + 1 < src.len() => end, // if there is a room for trailing \n
+                    _ => return Ok(None),
+                };
+                let len: i32 = match &src[..end] {
+                    [] => 0, // empty
+                    [b'*', len_bytes @ ..] => parse_bytes(len_bytes).map_err(|_| {
+                        ConnectionError::Protocol("invalid multibulk length".to_owned())
+                    })?, // array
+                    _ => {
+                        return Err(ConnectionError::Protocol(
+                            "inline protocol is not implemented".to_owned(),
+                        ))
+                    }
+                };
+                src.advance(end + 2); // 2 for skipping \r\n
+                if len <= 0 {
+                    return Ok(Some(Vec::new()));
+                }
 
-        let end = match bytes.find_byte(b'\r') {
-            Some(end) if end + 1 < bytes.len() => end, // if there is a room for trailing \n
-            _ => return Ok(None),
-        };
-        let len: i32 = match &bytes[..end] {
-            [] => 0, // empty
-            [b'*', len_bytes @ ..] => parse_bytes(len_bytes)
-                .map_err(|_| ConnectionError::Protocol("invalid multibulk length".to_owned()))?, // array
-            _ => {
-                return Err(ConnectionError::Protocol(
-                    "inline protocol is not implemented".to_owned(),
-                ))
+                let array_len = len as usize;
+                self.array_len = Some(array_len);
+                assert!(self.array.is_empty());
+                self.array.reserve(array_len);
+                array_len
             }
+            Some(array_len) => array_len,
         };
-        bytes = &bytes[end + 2..]; // 2 for skipping \r\n
-        if len <= 0 {
-            src.advance(src.len() - bytes.len()); // `bytes` has unconsumed bytes
-            return Ok(Some(Vec::new()));
-        }
 
-        let mut strings = Vec::with_capacity(len as usize);
-        for _ in 0..len {
-            let end = match bytes.find_byte(b'\r') {
-                Some(end) if end + 1 < bytes.len() => end,
+        for _ in self.array.len()..array_len {
+            let end = match src.find_byte(b'\r') {
+                Some(end) if end + 1 < src.len() => end,
                 _ => return Ok(None),
             };
             // expect bulk string
-            let [b'$', len_bytes @ ..] = &bytes[..end] else {
+            let [b'$', len_bytes @ ..] = &src[..end] else {
                 return Err(ConnectionError::Protocol(format!(
                     "expected '$', got '{}'",
-                    char::from(bytes[0])
+                    char::from(src[0])
                 )));
             };
-            bytes = &bytes[end + 2..];
-
             let len: usize = parse_bytes(len_bytes)
                 .map_err(|_| ConnectionError::Protocol("invalid bulk length".to_owned()))?;
-            if len + 2 > bytes.len() {
+            if end + 2 + len + 2 > src.len() {
                 return Ok(None);
             }
-            strings.push(bytes[..len].to_vec());
-            bytes = &bytes[len + 2..];
+            src.advance(end + 2);
+            self.array.push(src.split_to(len).freeze());
+            src.advance(2);
         }
 
-        src.advance(src.len() - bytes.len());
-        Ok(Some(strings))
+        self.array_len = None;
+        Ok(Some(std::mem::take(&mut self.array)))
     }
 }
 
-pub struct ResponseEncoder;
-
-impl Encoder<RedisResult> for ResponseEncoder {
+impl Encoder<&RedisResult> for RespCodec {
     type Error = std::io::Error;
 
-    fn encode(&mut self, item: RedisResult, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        encode(&mut dst.writer(), &item)
+    fn encode(&mut self, item: &RedisResult, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        encode(&mut dst.writer(), item)
     }
 }
 

@@ -5,6 +5,7 @@ use crate::{
     lockable::{ReadLockable, RwLockable},
     BytesExt, Dictionary, Object, RedisResult,
 };
+use bytes::{BufMut, Bytes};
 use std::collections::hash_map::Entry;
 
 impl CommandSpec for command::BitCount {
@@ -13,7 +14,7 @@ impl CommandSpec for command::BitCount {
 }
 
 impl ReadCommandHandler for command::BitCount {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, options @ ..] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -90,7 +91,7 @@ impl CommandSpec for command::BitOp {
 }
 
 impl WriteCommandHandler for command::BitOp {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (op, dest_key, keys) = match args {
             [_op, _dest_key] => return Err(ResponseError::WrongArity.into()),
             [op, dest_key, keys @ ..] => (op, dest_key, keys),
@@ -137,7 +138,7 @@ impl WriteCommandHandler for command::BitOp {
         for _ in 0..max_len {
             let mut dest_byte = first.next().copied().unwrap_or(0);
             if op == BitOp::Not {
-                dest_bytes.push(!dest_byte);
+                dest_bytes.put_u8(!dest_byte);
                 continue;
             }
             for iter in &mut *rest {
@@ -149,7 +150,7 @@ impl WriteCommandHandler for command::BitOp {
                     BitOp::Not => unreachable!(),
                 }
             }
-            dest_bytes.push(dest_byte);
+            dest_bytes.put_u8(dest_byte);
         }
         dict.insert(dest_key.clone(), dest_bytes.into());
         Ok((max_len as i64).into())
@@ -162,7 +163,7 @@ impl CommandSpec for command::GetBit {
 }
 
 impl ReadCommandHandler for command::GetBit {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, offset] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -188,7 +189,7 @@ impl CommandSpec for command::SetBit {
 }
 
 impl WriteCommandHandler for command::SetBit {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, offset, value] = args else {
             return Err(ResponseError::WrongArity.into());
         };

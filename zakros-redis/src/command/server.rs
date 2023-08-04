@@ -6,6 +6,7 @@ use crate::{
     resp::Value,
     Dictionary, RedisResult,
 };
+use bytes::Bytes;
 use std::time::{Duration, SystemTime};
 
 impl CommandSpec for command::DbSize {
@@ -14,7 +15,7 @@ impl CommandSpec for command::DbSize {
 }
 
 impl ReadCommandHandler for command::DbSize {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         if args.is_empty() {
             Ok((dict.read().len() as i64).into())
         } else {
@@ -29,7 +30,7 @@ impl CommandSpec for command::Echo {
 }
 
 impl StatelessCommandHandler for command::Echo {
-    fn call(args: &[Vec<u8>]) -> RedisResult {
+    fn call(args: &[Bytes]) -> RedisResult {
         match args {
             [message] => Ok(message.clone().into()),
             _ => Err(ResponseError::WrongArity.into()),
@@ -43,7 +44,7 @@ impl CommandSpec for command::FlushAll {
 }
 
 impl WriteCommandHandler for command::FlushAll {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         flush(dict, args)
     }
 }
@@ -54,7 +55,7 @@ impl CommandSpec for command::FlushDb {
 }
 
 impl WriteCommandHandler for command::FlushDb {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         flush(dict, args)
     }
 }
@@ -70,7 +71,7 @@ impl CommandSpec for command::Ping {
 }
 
 impl StatelessCommandHandler for command::Ping {
-    fn call(args: &[Vec<u8>]) -> RedisResult {
+    fn call(args: &[Bytes]) -> RedisResult {
         match args {
             [] => Ok("PONG".into()),
             [message] => Ok(message.clone().into()),
@@ -85,7 +86,7 @@ impl CommandSpec for command::Time {
 }
 
 impl StatelessCommandHandler for command::Time {
-    fn call(args: &[Vec<u8>]) -> RedisResult {
+    fn call(args: &[Bytes]) -> RedisResult {
         if !args.is_empty() {
             return Err(ResponseError::WrongArity.into());
         }
@@ -93,13 +94,13 @@ impl StatelessCommandHandler for command::Time {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or(Duration::ZERO);
         Ok(Value::Array(vec![
-            Ok(since_epoch.as_secs().to_string().into_bytes().into()),
-            Ok(since_epoch.subsec_micros().to_string().into_bytes().into()),
+            Ok(Bytes::from(since_epoch.as_secs().to_string().into_bytes()).into()),
+            Ok(Bytes::from(since_epoch.subsec_micros().to_string().into_bytes()).into()),
         ]))
     }
 }
 
-fn flush<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+fn flush<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
     if args.len() <= 1 {
         dict.write().clear();
         Ok(Value::ok())

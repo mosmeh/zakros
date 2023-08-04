@@ -5,6 +5,7 @@ use crate::{
     RedisResult,
 };
 use async_trait::async_trait;
+use bytes::Bytes;
 
 #[derive(Default)]
 pub struct Session<H> {
@@ -20,11 +21,7 @@ impl<H: SessionHandler> Session<H> {
         }
     }
 
-    pub async fn call(
-        &mut self,
-        command: &[u8],
-        args: &[Vec<u8>],
-    ) -> Result<RedisResult, H::Error> {
+    pub async fn call(&mut self, command: &[u8], args: &[Bytes]) -> Result<RedisResult, H::Error> {
         let command = match ParsedCommand::try_from(command) {
             Ok(command) => command,
             Err(err) => {
@@ -105,7 +102,7 @@ impl<H: SessionHandler> Session<H> {
 enum Transaction {
     #[default]
     Inactive,
-    Queued(Vec<(RedisCommand, Vec<Vec<u8>>)>),
+    Queued(Vec<(RedisCommand, Vec<Bytes>)>),
     Error,
 }
 
@@ -116,11 +113,11 @@ pub trait SessionHandler {
     async fn call(
         &mut self,
         command: RedisCommand,
-        args: &[Vec<u8>],
+        args: &[Bytes],
     ) -> Result<RedisResult, Self::Error>;
 
     async fn exec(
         &mut self,
-        commands: Vec<(RedisCommand, Vec<Vec<u8>>)>,
+        commands: Vec<(RedisCommand, Vec<Bytes>)>,
     ) -> Result<RedisResult, Self::Error>;
 }

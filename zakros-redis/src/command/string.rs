@@ -6,6 +6,7 @@ use crate::{
     resp::Value,
     BytesExt, Dictionary, Object, RedisResult,
 };
+use bytes::Bytes;
 use std::collections::hash_map::Entry;
 
 impl CommandSpec for command::Append {
@@ -14,7 +15,7 @@ impl CommandSpec for command::Append {
 }
 
 impl WriteCommandHandler for command::Append {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, value] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -28,7 +29,7 @@ impl WriteCommandHandler for command::Append {
             }
             Entry::Vacant(entry) => {
                 let len = value.len();
-                entry.insert(value.clone().into());
+                entry.insert(value.to_vec().into());
                 Ok((len as i64).into())
             }
         }
@@ -41,12 +42,12 @@ impl CommandSpec for command::Get {
 }
 
 impl ReadCommandHandler for command::Get {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key] = args else {
             return Err(ResponseError::WrongArity.into());
         };
         match dict.read().get(key) {
-            Some(Object::String(value)) => Ok(value.clone().into()),
+            Some(Object::String(value)) => Ok(Bytes::from(value.clone()).into()),
             Some(_) => Err(Error::WrongType),
             None => Ok(Value::Null),
         }
@@ -59,14 +60,14 @@ impl CommandSpec for command::GetRange {
 }
 
 impl ReadCommandHandler for command::GetRange {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, start, end] = args else {
             return Err(ResponseError::WrongArity.into());
         };
         let mut start = start.to_i64()?;
         let mut end = end.to_i64()?;
         if start < 0 && end < 0 && start > end {
-            return Ok(Value::BulkString(Vec::new()));
+            return Ok(Value::BulkString(Bytes::new()));
         }
         match dict.read().get(key) {
             Some(Object::String(s)) => {
@@ -79,13 +80,13 @@ impl ReadCommandHandler for command::GetRange {
                 }
                 end = end.min(len - 1);
                 Ok(if start > end || s.is_empty() {
-                    Value::BulkString(Vec::new())
+                    Value::BulkString(Bytes::new())
                 } else {
-                    s[start as usize..=end as usize].to_vec().into()
+                    Bytes::copy_from_slice(&s[start as usize..=end as usize]).into()
                 })
             }
             Some(_) => Err(Error::WrongType),
-            None => Ok(Value::BulkString(Vec::new())),
+            None => Ok(Value::BulkString(Bytes::new())),
         }
     }
 }
@@ -96,7 +97,7 @@ impl CommandSpec for command::GetDel {
 }
 
 impl WriteCommandHandler for command::GetDel {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -109,7 +110,7 @@ impl WriteCommandHandler for command::GetDel {
         };
         let value = s.clone();
         entry.remove();
-        Ok(value.into())
+        Ok(Bytes::from(value).into())
     }
 }
 
@@ -119,7 +120,7 @@ impl CommandSpec for command::GetSet {
 }
 
 impl WriteCommandHandler for command::GetSet {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, value] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -128,11 +129,11 @@ impl WriteCommandHandler for command::GetSet {
                 let Object::String(s) = entry.get_mut() else {
                     return Err(Error::WrongType);
                 };
-                let prev_value = std::mem::replace(s, value.clone());
-                Ok(prev_value.into())
+                let prev_value = std::mem::replace(s, value.to_vec());
+                Ok(Bytes::from(prev_value).into())
             }
             Entry::Vacant(entry) => {
-                entry.insert(value.clone().into());
+                entry.insert(value.to_vec().into());
                 Ok(Value::Null)
             }
         }
@@ -145,7 +146,7 @@ impl CommandSpec for command::MGet {
 }
 
 impl ReadCommandHandler for command::MGet {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         if args.is_empty() {
             return Err(ResponseError::WrongArity.into());
         }
@@ -154,7 +155,7 @@ impl ReadCommandHandler for command::MGet {
             .iter()
             .map(|key| {
                 Ok(match dict.get(key) {
-                    Some(Object::String(value)) => value.clone().into(),
+                    Some(Object::String(value)) => Bytes::from(value.clone()).into(),
                     _ => Value::Null,
                 })
             })
@@ -169,14 +170,14 @@ impl CommandSpec for command::MSet {
 }
 
 impl WriteCommandHandler for command::MSet {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         if args.is_empty() || args.len() % 2 != 0 {
             return Err(ResponseError::WrongArity.into());
         }
         let mut dict = dict.write();
         for pair in args.chunks_exact(2) {
             let [key, value] = pair else { unreachable!() };
-            dict.insert(key.clone(), value.clone().into());
+            dict.insert(key.clone(), value.to_vec().into());
         }
         Ok(Value::ok())
     }
@@ -188,7 +189,7 @@ impl CommandSpec for command::MSetNx {
 }
 
 impl WriteCommandHandler for command::MSetNx {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         if args.is_empty() || args.len() % 2 != 0 {
             return Err(ResponseError::WrongArity.into());
         }
@@ -200,7 +201,7 @@ impl WriteCommandHandler for command::MSetNx {
         }
         for pair in args.chunks_exact(2) {
             let [key, value] = pair else { unreachable!() };
-            dict.insert(key.clone(), value.clone().into());
+            dict.insert(key.clone(), value.to_vec().into());
         }
         Ok(1.into())
     }
@@ -212,7 +213,7 @@ impl CommandSpec for command::Set {
 }
 
 impl WriteCommandHandler for command::Set {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, value, options @ ..] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -239,12 +240,12 @@ impl WriteCommandHandler for command::Set {
                     let prev_value = if nx {
                         s.clone()
                     } else {
-                        std::mem::replace(s, value.clone())
+                        std::mem::replace(s, value.to_vec().clone())
                     };
-                    return Ok(prev_value.into());
+                    return Ok(Bytes::from(prev_value).into());
                 }
                 Ok(if !nx {
-                    entry.insert(value.clone().into());
+                    entry.insert(value.to_vec().into());
                     Value::ok()
                 } else {
                     Value::Null
@@ -252,7 +253,7 @@ impl WriteCommandHandler for command::Set {
             }
             Entry::Vacant(entry) => {
                 if !xx {
-                    entry.insert(value.clone().into());
+                    entry.insert(value.to_vec().into());
                 }
                 Ok(if get || xx { Value::Null } else { Value::ok() })
             }
@@ -266,7 +267,7 @@ impl CommandSpec for command::SetNx {
 }
 
 impl WriteCommandHandler for command::SetNx {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, value] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -274,7 +275,7 @@ impl WriteCommandHandler for command::SetNx {
         let Entry::Vacant(entry) = dict.entry(key.clone()) else {
             return Ok(0.into());
         };
-        entry.insert(value.clone().into());
+        entry.insert(value.to_vec().into());
         Ok(1.into())
     }
 }
@@ -285,7 +286,7 @@ impl CommandSpec for command::SetRange {
 }
 
 impl WriteCommandHandler for command::SetRange {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, offset, value] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -329,7 +330,7 @@ impl CommandSpec for command::StrLen {
 }
 
 impl ReadCommandHandler for command::StrLen {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -347,7 +348,7 @@ impl CommandSpec for command::SubStr {
 }
 
 impl ReadCommandHandler for command::SubStr {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         command::GetRange::call(dict, args)
     }
 }

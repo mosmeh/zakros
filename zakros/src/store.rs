@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use bytes::Bytes;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, sync::Arc};
@@ -61,8 +62,8 @@ impl<'a> RwLockable<'a, Dictionary> for Store {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StoreCommand {
-    SingleWrite((WriteCommand, Vec<Vec<u8>>)),
-    Exec(Vec<(RedisCommand, Vec<Vec<u8>>)>),
+    SingleWrite((WriteCommand, Vec<Bytes>)),
+    Exec(Vec<(RedisCommand, Vec<Bytes>)>),
 }
 
 impl zakros_raft::Command for StoreCommand {

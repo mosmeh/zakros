@@ -6,6 +6,7 @@ use crate::{
     resp::Value,
     Dictionary, Object, RedisResult,
 };
+use bytes::Bytes;
 use std::collections::{hash_map::Entry, HashSet};
 
 impl CommandSpec for command::SAdd {
@@ -14,7 +15,7 @@ impl CommandSpec for command::SAdd {
 }
 
 impl WriteCommandHandler for command::SAdd {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, members) = match args {
             [_key] => return Err(ResponseError::WrongArity.into()),
             [key, members @ ..] => (key, members),
@@ -47,7 +48,7 @@ impl CommandSpec for command::SCard {
 }
 
 impl ReadCommandHandler for command::SCard {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -65,7 +66,7 @@ impl CommandSpec for command::SDiff {
 }
 
 impl ReadCommandHandler for command::SDiff {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         apply_and_return(dict, args, diff)
     }
 }
@@ -76,7 +77,7 @@ impl CommandSpec for command::SDiffStore {
 }
 
 impl WriteCommandHandler for command::SDiffStore {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         apply_and_store(dict, args, diff)
     }
 }
@@ -87,7 +88,7 @@ impl CommandSpec for command::SInter {
 }
 
 impl ReadCommandHandler for command::SInter {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         apply_and_return(dict, args, intersection)
     }
 }
@@ -98,7 +99,7 @@ impl CommandSpec for command::SInterStore {
 }
 
 impl WriteCommandHandler for command::SInterStore {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         apply_and_store(dict, args, intersection)
     }
 }
@@ -109,7 +110,7 @@ impl CommandSpec for command::SIsMember {
 }
 
 impl ReadCommandHandler for command::SIsMember {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, member] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -127,7 +128,7 @@ impl CommandSpec for command::SMembers {
 }
 
 impl ReadCommandHandler for command::SMembers {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -148,7 +149,7 @@ impl CommandSpec for command::SMIsMember {
 }
 
 impl ReadCommandHandler for command::SMIsMember {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, members) = match args {
             [_key] => return Err(ResponseError::WrongArity.into()),
             [key, members @ ..] => (key, members),
@@ -176,7 +177,7 @@ impl CommandSpec for command::SMove {
 }
 
 impl WriteCommandHandler for command::SMove {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [source, destination, member] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -216,7 +217,7 @@ impl CommandSpec for command::SRem {
 }
 
 impl WriteCommandHandler for command::SRem {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, members) = match args {
             [_key] => return Err(ResponseError::WrongArity.into()),
             [key, members @ ..] => (key, members),
@@ -249,7 +250,7 @@ impl CommandSpec for command::SUnion {
 }
 
 impl ReadCommandHandler for command::SUnion {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         apply_and_return(dict, args, union)
     }
 }
@@ -260,15 +261,15 @@ impl CommandSpec for command::SUnionStore {
 }
 
 impl WriteCommandHandler for command::SUnionStore {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         apply_and_store(dict, args, union)
     }
 }
 
-fn apply_and_return<'a, D, F>(dict: &'a D, args: &[Vec<u8>], f: F) -> RedisResult
+fn apply_and_return<'a, D, F>(dict: &'a D, args: &[Bytes], f: F) -> RedisResult
 where
     D: ReadLockable<'a, Dictionary>,
-    F: Fn(&mut HashSet<Vec<u8>>, &HashSet<Vec<u8>>),
+    F: Fn(&mut HashSet<Bytes>, &HashSet<Bytes>),
 {
     let [lhs_key, rhs_keys @ ..] = args else {
         return Err(ResponseError::WrongArity.into());
@@ -280,10 +281,10 @@ where
     Ok(values.into())
 }
 
-fn apply_and_store<'a, D, F>(dict: &'a D, args: &[Vec<u8>], f: F) -> RedisResult
+fn apply_and_store<'a, D, F>(dict: &'a D, args: &[Bytes], f: F) -> RedisResult
 where
     D: RwLockable<'a, Dictionary>,
-    F: Fn(&mut HashSet<Vec<u8>>, &HashSet<Vec<u8>>),
+    F: Fn(&mut HashSet<Bytes>, &HashSet<Bytes>),
 {
     let [destination, lfs_key, rhs_keys @ ..] = args else {
         return Err(ResponseError::WrongArity.into());
@@ -302,11 +303,11 @@ where
 fn apply<F>(
     dict: &Dictionary,
     lhs_key: &[u8],
-    rhs_keys: &[Vec<u8>],
+    rhs_keys: &[Bytes],
     f: F,
-) -> Result<HashSet<Vec<u8>>, Error>
+) -> Result<HashSet<Bytes>, Error>
 where
-    F: Fn(&mut HashSet<Vec<u8>>, &HashSet<Vec<u8>>),
+    F: Fn(&mut HashSet<Bytes>, &HashSet<Bytes>),
 {
     let mut lhs_set = match dict.get(lhs_key) {
         Some(Object::Set(set)) => set.clone(),
@@ -323,7 +324,7 @@ where
     Ok(lhs_set)
 }
 
-fn diff(dest: &mut HashSet<Vec<u8>>, src: &HashSet<Vec<u8>>) {
+fn diff(dest: &mut HashSet<Bytes>, src: &HashSet<Bytes>) {
     for member in src {
         if dest.is_empty() {
             break;
@@ -332,7 +333,7 @@ fn diff(dest: &mut HashSet<Vec<u8>>, src: &HashSet<Vec<u8>>) {
     }
 }
 
-fn intersection(dest: &mut HashSet<Vec<u8>>, src: &HashSet<Vec<u8>>) {
+fn intersection(dest: &mut HashSet<Bytes>, src: &HashSet<Bytes>) {
     if src.is_empty() {
         dest.clear();
     } else {
@@ -340,7 +341,7 @@ fn intersection(dest: &mut HashSet<Vec<u8>>, src: &HashSet<Vec<u8>>) {
     }
 }
 
-fn union(dest: &mut HashSet<Vec<u8>>, src: &HashSet<Vec<u8>>) {
+fn union(dest: &mut HashSet<Bytes>, src: &HashSet<Bytes>) {
     for member in src {
         dest.insert(member.clone());
     }

@@ -6,6 +6,7 @@ use crate::{
     resp::Value,
     Dictionary, Object, RedisResult,
 };
+use bytes::Bytes;
 use std::collections::{hash_map::Entry, HashMap};
 
 impl CommandSpec for command::HDel {
@@ -14,7 +15,7 @@ impl CommandSpec for command::HDel {
 }
 
 impl WriteCommandHandler for command::HDel {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, fields) = match args {
             [_key] => return Err(ResponseError::WrongArity.into()),
             [key, fields @ ..] => (key, fields),
@@ -48,7 +49,7 @@ impl CommandSpec for command::HExists {
 }
 
 impl ReadCommandHandler for command::HExists {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, field] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -66,7 +67,7 @@ impl CommandSpec for command::HGet {
 }
 
 impl ReadCommandHandler for command::HGet {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, field] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -87,7 +88,7 @@ impl CommandSpec for command::HGetAll {
 }
 
 impl ReadCommandHandler for command::HGetAll {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         read_hash(dict, args, |hash| {
             let mut responses = Vec::with_capacity(hash.len() * 2);
             for (field, value) in hash {
@@ -105,7 +106,7 @@ impl CommandSpec for command::HKeys {
 }
 
 impl ReadCommandHandler for command::HKeys {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         read_hash(dict, args, |hash| {
             hash.keys()
                 .map(|field| Ok(field.clone().into()))
@@ -121,7 +122,7 @@ impl CommandSpec for command::HLen {
 }
 
 impl ReadCommandHandler for command::HLen {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         read_hash(dict, args, |hash| (hash.len() as i64).into())
     }
 }
@@ -132,7 +133,7 @@ impl CommandSpec for command::HMGet {
 }
 
 impl ReadCommandHandler for command::HMGet {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, fields) = match args {
             [_key] => return Err(ResponseError::WrongArity.into()),
             [key, fields @ ..] => (key, fields),
@@ -163,7 +164,7 @@ impl CommandSpec for command::HMSet {
 }
 
 impl WriteCommandHandler for command::HMSet {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         command::HSet::call(dict, args)?;
         Ok(Value::ok())
     }
@@ -175,7 +176,7 @@ impl CommandSpec for command::HStrLen {
 }
 
 impl ReadCommandHandler for command::HStrLen {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, field] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -196,7 +197,7 @@ impl CommandSpec for command::HSet {
 }
 
 impl WriteCommandHandler for command::HSet {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, pairs) = match args {
             [_key] => return Err(ResponseError::WrongArity.into()),
             [key, pairs @ ..] if pairs.len() % 2 == 0 => (key, pairs),
@@ -235,7 +236,7 @@ impl CommandSpec for command::HSetNx {
 }
 
 impl WriteCommandHandler for command::HSetNx {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, field, value] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -270,7 +271,7 @@ impl CommandSpec for command::HVals {
 }
 
 impl ReadCommandHandler for command::HVals {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         read_hash(dict, args, |hash| {
             hash.values()
                 .map(|field| Ok(field.clone().into()))
@@ -280,10 +281,10 @@ impl ReadCommandHandler for command::HVals {
     }
 }
 
-fn read_hash<'a, D, F>(dict: &'a D, args: &[Vec<u8>], f: F) -> RedisResult
+fn read_hash<'a, D, F>(dict: &'a D, args: &[Bytes], f: F) -> RedisResult
 where
     D: ReadLockable<'a, Dictionary>,
-    F: Fn(&HashMap<Vec<u8>, Vec<u8>>) -> Value,
+    F: Fn(&HashMap<Bytes, Bytes>) -> Value,
 {
     let [key] = args else {
         return Err(ResponseError::WrongArity.into());

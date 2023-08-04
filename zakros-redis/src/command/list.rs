@@ -6,6 +6,7 @@ use crate::{
     resp::Value,
     BytesExt, Dictionary, Object, RedisResult,
 };
+use bytes::Bytes;
 use std::collections::{hash_map::Entry, VecDeque};
 
 impl CommandSpec for command::LIndex {
@@ -14,7 +15,7 @@ impl CommandSpec for command::LIndex {
 }
 
 impl ReadCommandHandler for command::LIndex {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, index] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -43,7 +44,7 @@ impl CommandSpec for command::LLen {
 }
 
 impl ReadCommandHandler for command::LLen {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -61,7 +62,7 @@ impl CommandSpec for command::LPop {
 }
 
 impl WriteCommandHandler for command::LPop {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         pop(dict, args, VecDeque::pop_front)
     }
 }
@@ -72,7 +73,7 @@ impl CommandSpec for command::LPush {
 }
 
 impl WriteCommandHandler for command::LPush {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         push::<_, _, false>(dict, args, VecDeque::push_front)
     }
 }
@@ -83,7 +84,7 @@ impl CommandSpec for command::LPushX {
 }
 
 impl WriteCommandHandler for command::LPushX {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         push::<_, _, true>(dict, args, VecDeque::push_front)
     }
 }
@@ -94,7 +95,7 @@ impl CommandSpec for command::LRange {
 }
 
 impl ReadCommandHandler for command::LRange {
-    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, start, stop] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -133,7 +134,7 @@ impl CommandSpec for command::LSet {
 }
 
 impl WriteCommandHandler for command::LSet {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, index, element] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -163,7 +164,7 @@ impl CommandSpec for command::LTrim {
 }
 
 impl WriteCommandHandler for command::LTrim {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [key, start, stop] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -200,7 +201,7 @@ impl CommandSpec for command::RPop {
 }
 
 impl WriteCommandHandler for command::RPop {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         pop(dict, args, VecDeque::pop_back)
     }
 }
@@ -211,7 +212,7 @@ impl CommandSpec for command::RPopLPush {
 }
 
 impl WriteCommandHandler for command::RPopLPush {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let [source, destination] = args else {
             return Err(ResponseError::WrongArity.into());
         };
@@ -254,7 +255,7 @@ impl CommandSpec for command::RPush {
 }
 
 impl WriteCommandHandler for command::RPush {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         push::<_, _, false>(dict, args, VecDeque::push_back)
     }
 }
@@ -265,15 +266,15 @@ impl CommandSpec for command::RPushX {
 }
 
 impl WriteCommandHandler for command::RPushX {
-    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Vec<u8>]) -> RedisResult {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         push::<_, _, true>(dict, args, VecDeque::push_back)
     }
 }
 
-fn push<'a, D, F, const XX: bool>(dict: &'a D, args: &[Vec<u8>], f: F) -> RedisResult
+fn push<'a, D, F, const XX: bool>(dict: &'a D, args: &[Bytes], f: F) -> RedisResult
 where
     D: RwLockable<'a, Dictionary>,
-    F: Fn(&mut VecDeque<Vec<u8>>, Vec<u8>),
+    F: Fn(&mut VecDeque<Bytes>, Bytes),
 {
     let (key, elements) = match args {
         [_key] => return Err(ResponseError::WrongArity.into()),
@@ -306,10 +307,10 @@ where
     }
 }
 
-fn pop<'a, D, F>(dict: &'a D, args: &[Vec<u8>], f: F) -> RedisResult
+fn pop<'a, D, F>(dict: &'a D, args: &[Bytes], f: F) -> RedisResult
 where
     D: RwLockable<'a, Dictionary>,
-    F: Fn(&mut VecDeque<Vec<u8>>) -> Option<Vec<u8>>,
+    F: Fn(&mut VecDeque<Bytes>) -> Option<Bytes>,
 {
     match args {
         [key] => match dict.write().entry(key.clone()) {

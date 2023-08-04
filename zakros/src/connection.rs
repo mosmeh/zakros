@@ -1,6 +1,7 @@
 use crate::{store::StoreCommand, RaftResult, Shared};
 use async_trait::async_trait;
 use bstr::ByteSlice;
+use bytes::Bytes;
 use futures::{SinkExt, StreamExt};
 use std::{
     net::SocketAddr,
@@ -8,12 +9,12 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tokio::{net::TcpStream, sync::TryAcquireError};
-use tokio_util::codec::{FramedRead, FramedWrite};
+use tokio_util::codec::Framed;
 use zakros_raft::{Error as RaftError, NodeId};
 use zakros_redis::{
     command::{RedisCommand, SystemCommand},
     error::{ConnectionError, Error as RedisError, ResponseError},
-    resp::{QueryDecoder, ResponseEncoder, Value},
+    resp::{RespCodec, Value},
     session::{Session, SessionHandler},
     BytesExt, RedisResult,
 };
@@ -41,10 +42,8 @@ impl RedisConnection {
             }
         };
 
-        let (reader, writer) = conn.into_split();
-        let mut reader = FramedRead::new(reader, QueryDecoder);
-        let mut writer = FramedWrite::new(writer, ResponseEncoder);
-        while let Some(decoded) = reader.next().await {
+        let mut framed = Framed::new(conn, RespCodec::default());
+        while let Some(decoded) = framed.next().await {
             match decoded {
                 Ok(strings) => {
                     tracing::trace!("received {:?}", DebugQuery(&strings));
@@ -52,12 +51,12 @@ impl RedisConnection {
                         continue;
                     };
                     let value = self.call(command, args).await;
-                    writer.send(value).await?;
+                    framed.send(&value).await?;
                 }
                 Err(ConnectionError::Io(err)) => return Err(err),
                 Err(ConnectionError::Protocol(err)) => {
-                    return writer
-                        .send(Err(ResponseError::ProtocolError(err).into()))
+                    return framed
+                        .send(&Err(ResponseError::ProtocolError(err).into()))
                         .await;
                 }
             }
@@ -65,7 +64,7 @@ impl RedisConnection {
         Ok(())
     }
 
-    async fn call(&mut self, command: &[u8], args: &[Vec<u8>]) -> RedisResult {
+    async fn call(&mut self, command: &[u8], args: &[Bytes]) -> RedisResult {
         let result = self.session.call(command, args).await;
         match result {
             Ok(value) => value,
@@ -86,7 +85,7 @@ impl RedisConnection {
     }
 }
 
-struct DebugQuery<'a>(&'a [Vec<u8>]);
+struct DebugQuery<'a>(&'a [Bytes]);
 
 impl std::fmt::Debug for DebugQuery<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -95,7 +94,7 @@ impl std::fmt::Debug for DebugQuery<'_> {
         }
         for s in self.0 {
             if s.len() > 30 {
-                write!(f, "{:?}... ", s[..30].as_bstr())?;
+                write!(f, "{:?}... ", &s[..30].as_bstr())?;
             } else {
                 write!(f, "{:?} ", s.as_bstr())?;
             }
@@ -113,7 +112,7 @@ struct Handler {
 impl SessionHandler for Handler {
     type Error = RaftError;
 
-    async fn call(&mut self, command: RedisCommand, args: &[Vec<u8>]) -> RaftResult<RedisResult> {
+    async fn call(&mut self, command: RedisCommand, args: &[Bytes]) -> RaftResult<RedisResult> {
         match command {
             RedisCommand::Write(command) => {
                 self.shared
@@ -132,10 +131,7 @@ impl SessionHandler for Handler {
         }
     }
 
-    async fn exec(
-        &mut self,
-        commands: Vec<(RedisCommand, Vec<Vec<u8>>)>,
-    ) -> RaftResult<RedisResult> {
+    async fn exec(&mut self, commands: Vec<(RedisCommand, Vec<Bytes>)>) -> RaftResult<RedisResult> {
         self.shared.raft.write(StoreCommand::Exec(commands)).await
     }
 }
@@ -151,7 +147,7 @@ impl Handler {
     async fn handle_system_command(
         &mut self,
         command: SystemCommand,
-        args: &[Vec<u8>],
+        args: &[Bytes],
     ) -> RaftResult<RedisResult> {
         match command {
             SystemCommand::Cluster => self.shared.handle_cluster(args).await,
@@ -163,7 +159,7 @@ impl Handler {
         }
     }
 
-    fn handle_readonly(&mut self, args: &[Vec<u8>]) -> RedisResult {
+    fn handle_readonly(&mut self, args: &[Bytes]) -> RedisResult {
         if args.is_empty() {
             self.is_readonly = true;
             Ok(Value::ok())
@@ -172,7 +168,7 @@ impl Handler {
         }
     }
 
-    fn handle_readwrite(&mut self, args: &[Vec<u8>]) -> RedisResult {
+    fn handle_readwrite(&mut self, args: &[Bytes]) -> RedisResult {
         if args.is_empty() {
             self.is_readonly = false;
             Ok(Value::ok())
@@ -183,16 +179,14 @@ impl Handler {
 }
 
 impl Shared {
-    async fn handle_cluster(&self, args: &[Vec<u8>]) -> RaftResult<RedisResult> {
+    async fn handle_cluster(&self, args: &[Bytes]) -> RaftResult<RedisResult> {
         fn format_node_id(node_id: NodeId) -> RedisResult {
-            Ok(format!("{:0>40x}", Into::<u64>::into(node_id))
-                .into_bytes()
-                .into())
+            Ok(Bytes::from(format!("{:0>40x}", Into::<u64>::into(node_id)).into_bytes()).into())
         }
 
         fn format_node(node_id: NodeId, addr: SocketAddr) -> RedisResult {
             Ok(Value::Array(vec![
-                Ok(addr.ip().to_string().into_bytes().into()),
+                Ok(Bytes::from(addr.ip().to_string().into_bytes()).into()),
                 Ok((addr.port() as i64).into()),
                 format_node_id(node_id),
             ]))
@@ -228,7 +222,7 @@ impl Shared {
         }
     }
 
-    fn handle_info(&self, args: &[Vec<u8>]) -> RedisResult {
+    fn handle_info(&self, args: &[Bytes]) -> RedisResult {
         let mut sections;
         if args.is_empty() {
             sections = ALL;
@@ -247,7 +241,7 @@ impl Shared {
         Ok(self.generate_info_str(sections).unwrap().into())
     }
 
-    fn generate_info_str(&self, sections: u8) -> std::io::Result<Vec<u8>> {
+    fn generate_info_str(&self, sections: u8) -> std::io::Result<Bytes> {
         use std::io::Write;
 
         let mut out = Vec::new();
@@ -288,7 +282,7 @@ impl Shared {
             out.write_all(b"# Cluster\r\n")?;
             write!(out, "cluster_enabled:1\r\n")?;
         }
-        Ok(out)
+        Ok(Bytes::from(out))
     }
 }
 
@@ -297,7 +291,7 @@ const CLIENTS: u8 = 0x2;
 const CLUSTER: u8 = 0x4;
 const ALL: u8 = SERVER | CLIENTS | CLUSTER;
 
-fn handle_select(args: &[Vec<u8>]) -> RedisResult {
+fn handle_select(args: &[Bytes]) -> RedisResult {
     let [index] = args else {
         return Err(ResponseError::WrongArity.into());
     };
@@ -308,7 +302,7 @@ fn handle_select(args: &[Vec<u8>]) -> RedisResult {
     }
 }
 
-fn handle_shutdown(_: &[Vec<u8>]) -> RedisResult {
+fn handle_shutdown(_: &[Bytes]) -> RedisResult {
     // TODO: gracefully shutdown
     std::process::exit(0)
 }

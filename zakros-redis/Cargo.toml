@@ -8,6 +8,6 @@ async-trait = "0.1.72"
 bstr = { version = "1.6.0", default-features = false }
 bytes = "1.4.0"
 parking_lot = "0.12.1"
-serde = { version = "1.0.180", features = ["derive"] }
+serde = { version = "1.0.181", features = ["derive"] }
 thiserror = "1.0.44"
 tokio-util = "0.7.8"
