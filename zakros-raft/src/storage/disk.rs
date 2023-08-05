@@ -15,6 +15,9 @@ use tokio_util::codec::{Decoder, Encoder, Framed, FramedRead};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DiskStorageError {
+    #[error("Index is too large")]
+    IndexTooLarge,
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
@@ -56,7 +59,9 @@ where
 
     async fn entry(&mut self, index: u64) -> Result<Option<Entry<Self::Command>>, Self::Error> {
         let index: usize = if index > 0 {
-            (index - 1).try_into().unwrap()
+            (index - 1)
+                .try_into()
+                .map_err(|_| DiskStorageError::IndexTooLarge)?
         } else {
             return Ok(None);
         };
@@ -71,7 +76,9 @@ where
 
     async fn entries(&mut self, start: u64) -> Result<Vec<Entry<Self::Command>>, Self::Error> {
         assert!(start > 0);
-        let index: usize = (start - 1).try_into().unwrap();
+        let index: usize = (start - 1)
+            .try_into()
+            .map_err(|_| DiskStorageError::IndexTooLarge)?;
         let Some(&offset) = self.offsets.get(index) else {
             return Ok(Vec::new());
         };
@@ -104,7 +111,9 @@ where
 
     async fn truncate_entries(&mut self, index: u64) -> Result<(), Self::Error> {
         assert!(index > 0);
-        let index: usize = index.try_into().unwrap();
+        let index: usize = index
+            .try_into()
+            .map_err(|_| DiskStorageError::IndexTooLarge)?;
         let Some(&offset) = self.offsets.get(index) else {
             return Ok(());
         };

@@ -16,7 +16,7 @@ use tokio::{
     sync::Semaphore,
 };
 use tokio_util::codec::LengthDelimitedCodec;
-use zakros_raft::{config::Config, storage::DiskStorage, NodeId, Raft};
+use zakros_raft::{config::Config, NodeId, Raft};
 
 type RaftResult<T> = Result<T, zakros_raft::Error>;
 
@@ -94,7 +94,7 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
     }
 }
 
-struct Shared {
+pub struct Shared {
     opts: Opts,
     raft: Raft<StoreCommand>,
     store: Store,
@@ -109,8 +109,10 @@ impl Shared {
             .map(NodeId::from)
             .collect();
         let store = Store::new();
-        let storage =
-            DiskStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string())).await?;
+        let storage = zakros_raft::storage::DiskStorage::new(
+            opts.dir.join(Into::<u64>::into(node_id).to_string()),
+        )
+        .await?;
         let rpc_handler = Arc::new(RpcHandler::new(opts.cluster_addrs.clone()));
         let raft = Raft::new(
             node_id,

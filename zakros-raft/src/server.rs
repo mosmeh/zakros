@@ -57,9 +57,9 @@ where
     pending_read_requests: VecDeque<ReadRequest>,
 
     pending_append_entries_responses:
-        FuturesUnordered<JoinHandle<Response<AppendEntriesResponse, T::Error>>>,
+        FuturesUnordered<JoinHandle<RpcResponse<AppendEntriesResponse, T::Error>>>,
     pending_request_vote_responses:
-        FuturesUnordered<JoinHandle<Response<RequestVoteResponse, T::Error>>>,
+        FuturesUnordered<JoinHandle<RpcResponse<RequestVoteResponse, T::Error>>>,
 }
 
 impl<C, M, S, T> Server<C, M, S, T>
@@ -267,9 +267,9 @@ where
 
     async fn handle_append_entries_response(
         &mut self,
-        response: Response<AppendEntriesResponse, T::Error>,
+        response: RpcResponse<AppendEntriesResponse, T::Error>,
     ) {
-        let Response { node_id, result } = response;
+        let RpcResponse { node_id, result } = response;
         let response = match result {
             Ok(response) => response,
             Err(err) => {
@@ -377,9 +377,9 @@ where
 
     async fn handle_request_vote_response(
         &mut self,
-        response: Response<RequestVoteResponse, T::Error>,
+        response: RpcResponse<RequestVoteResponse, T::Error>,
     ) {
-        let Response { node_id, result } = response;
+        let RpcResponse { node_id, result } = response;
         let response = match result {
             Ok(response) => response,
             Err(err) => {
@@ -675,7 +675,7 @@ where
             tracing::trace!("sending RequestVote to {:?}", node_id);
             self.pending_request_vote_responses
                 .push(tokio::spawn(async move {
-                    Response {
+                    RpcResponse {
                         node_id,
                         result: transport.send_request_vote(node_id, request).await,
                     }
@@ -716,7 +716,7 @@ where
     async fn spawn_append_entries_task(
         &mut self,
         dest: NodeId,
-    ) -> JoinHandle<Response<AppendEntriesResponse, T::Error>> {
+    ) -> JoinHandle<RpcResponse<AppendEntriesResponse, T::Error>> {
         let node = self.nodes.get(&dest).unwrap();
         let prev_log_term = self
             .storage
@@ -744,7 +744,7 @@ where
             dest
         );
         tokio::spawn(async move {
-            Response {
+            RpcResponse {
                 node_id: dest,
                 result: transport.send_append_entries(dest, request).await,
             }
@@ -760,7 +760,7 @@ pub enum Message<C: Command> {
     Status(oneshot::Sender<Status>),
 }
 
-struct Response<R, E> {
+struct RpcResponse<R, E> {
     node_id: NodeId,
     result: Result<R, E>,
 }

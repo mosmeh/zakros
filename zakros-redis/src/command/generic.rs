@@ -63,7 +63,7 @@ impl ReadCommandHandler for command::Keys {
         let keys = dict
             .read()
             .keys()
-            .filter(|key| crate::string::string_match(pattern, key))
+            .filter(|key| crate::string_match(pattern, key))
             .map(|key| Ok(key.clone().into()))
             .collect();
         Ok(Value::Array(keys))

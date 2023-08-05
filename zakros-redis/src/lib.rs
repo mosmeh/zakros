@@ -10,6 +10,7 @@ use bytes::Bytes;
 use error::{Error, ResponseError};
 use resp::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
+use string::string_match;
 
 pub type RedisResult = Result<Value, Error>;
 

@@ -139,11 +139,11 @@ impl Decoder for RespCodec {
     }
 }
 
-impl Encoder<&RedisResult> for RespCodec {
+impl Encoder<RedisResult> for RespCodec {
     type Error = std::io::Error;
 
-    fn encode(&mut self, item: &RedisResult, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        encode(&mut dst.writer(), item)
+    fn encode(&mut self, item: RedisResult, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        encode(&mut dst.writer(), &item)
     }
 }
 

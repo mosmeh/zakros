@@ -1,7 +1,12 @@
 use super::{Entry, Metadata, Storage};
 use crate::Command;
 use async_trait::async_trait;
-use std::convert::Infallible;
+
+#[derive(Debug, thiserror::Error)]
+pub enum MemoryStorageError {
+    #[error("Index is too large")]
+    IndexTooLarge,
+}
 
 pub struct MemoryStorage<C>(Vec<Entry<C>>);
 
@@ -20,7 +25,7 @@ impl<C> Default for MemoryStorage<C> {
 #[async_trait]
 impl<C: Command> Storage for MemoryStorage<C> {
     type Command = C;
-    type Error = Infallible;
+    type Error = MemoryStorageError;
 
     async fn load(&mut self) -> Result<Metadata, Self::Error> {
         Ok(Metadata::default())
@@ -32,9 +37,10 @@ impl<C: Command> Storage for MemoryStorage<C> {
 
     async fn entry(&mut self, index: u64) -> Result<Option<Entry<Self::Command>>, Self::Error> {
         Ok(if index > 0 {
-            self.0
-                .get(TryInto::<usize>::try_into(index).unwrap() - 1)
-                .cloned()
+            let index = TryInto::<usize>::try_into(index)
+                .map_err(|_| MemoryStorageError::IndexTooLarge)?
+                - 1;
+            self.0.get(index).cloned()
         } else {
             None
         })
@@ -42,7 +48,8 @@ impl<C: Command> Storage for MemoryStorage<C> {
 
     async fn entries(&mut self, start: u64) -> Result<Vec<Entry<Self::Command>>, Self::Error> {
         assert!(start > 0);
-        let start = TryInto::<usize>::try_into(start).unwrap() - 1;
+        let start =
+            TryInto::<usize>::try_into(start).map_err(|_| MemoryStorageError::IndexTooLarge)? - 1;
         if start >= self.0.len() {
             return Ok(Vec::new());
         }
@@ -59,8 +66,9 @@ impl<C: Command> Storage for MemoryStorage<C> {
 
     async fn truncate_entries(&mut self, index: u64) -> Result<(), Self::Error> {
         assert!(index > 0);
-        self.0
-            .truncate(TryInto::<usize>::try_into(index).unwrap() - 1);
+        let index =
+            TryInto::<usize>::try_into(index).map_err(|_| MemoryStorageError::IndexTooLarge)? - 1;
+        self.0.truncate(index);
         Ok(())
     }
 

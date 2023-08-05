@@ -240,7 +240,7 @@ impl WriteCommandHandler for command::Set {
                     let prev_value = if nx {
                         s.clone()
                     } else {
-                        std::mem::replace(s, value.to_vec().clone())
+                        std::mem::replace(s, value.to_vec())
                     };
                     return Ok(Bytes::from(prev_value).into());
                 }
