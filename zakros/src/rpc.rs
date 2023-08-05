@@ -12,12 +12,23 @@ use zakros_raft::{
 };
 use zakros_redis::pubsub::PubSubMessage;
 
-pub struct RpcHandler {
+#[tarpc::service]
+pub trait RpcService {
+    async fn append_entries(
+        request: AppendEntries<StoreCommand>,
+    ) -> RaftResult<AppendEntriesResponse>;
+
+    async fn request_vote(request: RequestVote) -> RaftResult<RequestVoteResponse>;
+
+    async fn publish(message: PubSubMessage);
+}
+
+pub struct RpcClient {
     cluster_addrs: Vec<SocketAddr>,
     timeout: Duration,
 }
 
-impl RpcHandler {
+impl RpcClient {
     pub(crate) fn new(cluster_addrs: Vec<SocketAddr>) -> Self {
         Self {
             cluster_addrs,
@@ -27,7 +38,7 @@ impl RpcHandler {
 }
 
 #[async_trait]
-impl Transport for RpcHandler {
+impl Transport for RpcClient {
     type Command = StoreCommand;
     type Error = anyhow::Error;
 
@@ -62,10 +73,10 @@ impl Transport for RpcHandler {
     }
 }
 
-impl RpcHandler {
+impl RpcClient {
     pub const RPC_MARKER: &[u8] = b"\0EZwHMud4TueVKxhHinaj3PgyZhSm8Nj";
 
-    async fn client(&self, node_id: NodeId) -> anyhow::Result<RpcServiceClient> {
+    async fn client(&self, node_id: NodeId) -> std::io::Result<RpcServiceClient> {
         let addr = self.cluster_addrs[Into::<u64>::into(node_id) as usize];
         let mut conn = TcpStream::connect(addr).await?;
         conn.write_all(Self::RPC_MARKER).await?;
@@ -76,26 +87,16 @@ impl RpcHandler {
         Ok(RpcServiceClient::new(Default::default(), transport).spawn())
     }
 
-    pub async fn publish(&self, dest: NodeId, message: PubSubMessage) {
-        let _ = timeout(self.timeout, async move {
-            let Ok(client) = self.client(dest).await else {
-                return;
-            };
-            let _ = client.publish(tarpc::context::current(), message).await;
+    pub async fn publish(&self, dest: NodeId, message: PubSubMessage) -> anyhow::Result<()> {
+        timeout(self.timeout, async move {
+            self.client(dest)
+                .await?
+                .publish(Context::current(), message)
+                .await
+                .map_err(Into::into)
         })
-        .await;
+        .await?
     }
-}
-
-#[tarpc::service]
-pub trait RpcService {
-    async fn append_entries(
-        request: AppendEntries<StoreCommand>,
-    ) -> RaftResult<AppendEntriesResponse>;
-
-    async fn request_vote(request: RequestVote) -> RaftResult<RequestVoteResponse>;
-
-    async fn publish(message: PubSubMessage);
 }
 
 #[derive(Clone)]

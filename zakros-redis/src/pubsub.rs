@@ -87,7 +87,7 @@ impl Shared {
         num_receivers
     }
 
-    fn subscribe_channel(&mut self, channel: Bytes) -> Receiver<Bytes> {
+    fn subscribe_to_channel(&mut self, channel: Bytes) -> Receiver<Bytes> {
         match self.channels.entry(channel) {
             Entry::Occupied(entry) => entry.get().subscribe(),
             Entry::Vacant(entry) => {
@@ -98,7 +98,7 @@ impl Shared {
         }
     }
 
-    fn unsubscribe_channel(&mut self, channel: Bytes) -> bool {
+    fn unsubscribe_from_channel(&mut self, channel: Bytes) -> bool {
         match self.channels.entry(channel) {
             Entry::Occupied(entry) => {
                 let num_receivers = entry.get().receiver_count();
@@ -112,7 +112,7 @@ impl Shared {
         }
     }
 
-    fn subscribe_pattern(&mut self, pattern: Bytes) -> Receiver<PubSubMessage> {
+    fn subscribe_to_pattern(&mut self, pattern: Bytes) -> Receiver<PubSubMessage> {
         match self.patterns.entry(pattern) {
             Entry::Occupied(entry) => entry.get().subscribe(),
             Entry::Vacant(entry) => {
@@ -123,7 +123,7 @@ impl Shared {
         }
     }
 
-    fn unsubscribe_pattern(&mut self, pattern: Bytes) -> bool {
+    fn unsubscribe_from_pattern(&mut self, pattern: Bytes) -> bool {
         match self.patterns.entry(pattern) {
             Entry::Occupied(entry) => {
                 let num_receivers = entry.get().receiver_count();
@@ -138,7 +138,7 @@ impl Shared {
     }
 }
 
-type ReceiverStream<T> = Pin<Box<dyn Stream<Item = Result<T, SubscriberRecvError>> + Send>>;
+type ReceiverStream<T> = Pin<Box<dyn Stream<Item = Result<T, SubscriberRecvError>> + Send + Sync>>;
 
 pub struct Subscriber {
     shared: Arc<RwLock<Shared>>,
@@ -151,11 +151,11 @@ impl Subscriber {
         self.channels.len() + self.patterns.len()
     }
 
-    pub fn subscribe_channel(&mut self, channel: Bytes) -> bool {
+    pub fn subscribe_to_channel(&mut self, channel: Bytes) -> bool {
         match self.channels.entry(channel.clone()) {
             Entry::Occupied(_) => false,
             Entry::Vacant(entry) => {
-                let mut rx = self.shared.write().subscribe_channel(channel);
+                let mut rx = self.shared.write().subscribe_to_channel(channel);
                 entry.insert(Box::pin(async_stream::stream! {
                     loop {
                         match rx.recv().await {
@@ -170,20 +170,20 @@ impl Subscriber {
         }
     }
 
-    pub fn unsubscribe_channel(&mut self, channel: Bytes) -> bool {
+    pub fn unsubscribe_from_channel(&mut self, channel: Bytes) -> bool {
         if self.channels.remove(&channel).is_some() {
-            assert!(self.shared.write().unsubscribe_channel(channel));
+            assert!(self.shared.write().unsubscribe_from_channel(channel));
             true
         } else {
             false
         }
     }
 
-    pub fn subscribe_pattern(&mut self, pattern: Bytes) -> bool {
+    pub fn subscribe_to_pattern(&mut self, pattern: Bytes) -> bool {
         match self.patterns.entry(pattern.clone()) {
             Entry::Occupied(_) => false,
             Entry::Vacant(entry) => {
-                let mut rx = self.shared.write().subscribe_pattern(pattern);
+                let mut rx = self.shared.write().subscribe_to_pattern(pattern);
                 entry.insert(Box::pin(async_stream::stream! {
                     loop {
                         match rx.recv().await {
@@ -198,9 +198,9 @@ impl Subscriber {
         }
     }
 
-    pub fn unsubscribe_pattern(&mut self, pattern: Bytes) -> bool {
+    pub fn unsubscribe_from_pattern(&mut self, pattern: Bytes) -> bool {
         if self.patterns.remove(&pattern).is_some() {
-            assert!(self.shared.write().unsubscribe_pattern(pattern));
+            assert!(self.shared.write().unsubscribe_from_pattern(pattern));
             true
         } else {
             false
@@ -250,10 +250,10 @@ impl Drop for Subscriber {
     fn drop(&mut self) {
         let mut shared = self.shared.write();
         for (channel, _) in self.channels.drain() {
-            assert!(shared.unsubscribe_channel(channel));
+            assert!(shared.unsubscribe_from_channel(channel));
         }
         for (pattern, _) in self.patterns.drain() {
-            assert!(shared.unsubscribe_pattern(pattern));
+            assert!(shared.unsubscribe_from_pattern(pattern));
         }
     }
 }

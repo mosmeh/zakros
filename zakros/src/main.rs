@@ -1,9 +1,10 @@
+mod command;
 mod connection;
 mod rpc;
 mod store;
 
-use clap::Parser;
-use rpc::{RpcHandler, RpcServer, RpcService};
+use clap::{Parser, ValueEnum};
+use rpc::{RpcClient, RpcServer, RpcService};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::SystemTime};
 use store::{Store, StoreCommand};
 use tarpc::{
@@ -16,10 +17,20 @@ use tokio::{
     sync::Semaphore,
 };
 use tokio_util::codec::LengthDelimitedCodec;
-use zakros_raft::{config::Config, NodeId, Raft};
+use zakros_raft::{
+    config::Config,
+    storage::{DiskStorage, MemoryStorage},
+    NodeId, Raft,
+};
 use zakros_redis::pubsub::Publisher;
 
 type RaftResult<T> = Result<T, zakros_raft::Error>;
+
+#[derive(Debug, Clone, ValueEnum)]
+enum RaftStorageKind {
+    Disk,
+    Memory,
+}
 
 #[derive(Debug, Clone, Parser)]
 struct Opts {
@@ -32,11 +43,14 @@ struct Opts {
     #[arg(short = 'c', long, value_delimiter = ',')]
     cluster_addrs: Vec<SocketAddr>,
 
-    #[arg(short = 'd', long, default_value = "data")]
-    dir: PathBuf,
-
     #[arg(long, default_value_t = 10000)]
     max_num_clients: usize,
+
+    #[arg(long, default_value = "disk")]
+    storage: RaftStorageKind,
+
+    #[arg(long, long, default_value = "data")]
+    dir: PathBuf,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -52,11 +66,11 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn is_rpc(conn: &mut TcpStream) -> std::io::Result<bool> {
-    let mut buf = [0; RpcHandler::RPC_MARKER.len()];
+    let mut buf = [0; RpcClient::RPC_MARKER.len()];
     loop {
         match conn.peek(&mut buf).await {
-            Ok(len) if buf[..len] != RpcHandler::RPC_MARKER[..len] => return Ok(false),
-            Ok(len) if len == RpcHandler::RPC_MARKER.len() => {
+            Ok(len) if buf[..len] != RpcClient::RPC_MARKER[..len] => return Ok(false),
+            Ok(len) if len == RpcClient::RPC_MARKER.len() => {
                 conn.read_exact(&mut buf).await?;
                 return Ok(true);
             }
@@ -99,10 +113,10 @@ pub struct Shared {
     opts: Opts,
     raft: Raft<StoreCommand>,
     store: Store,
+    rpc_client: Arc<RpcClient>,
+    publisher: Publisher,
     started_at: SystemTime,
     conn_limit: Arc<Semaphore>,
-    publisher: Publisher,
-    rpc_handler: Arc<RpcHandler>,
 }
 
 impl Shared {
@@ -112,28 +126,34 @@ impl Shared {
             .map(NodeId::from)
             .collect();
         let store = Store::new();
-        let storage = zakros_raft::storage::DiskStorage::new(
-            opts.dir.join(Into::<u64>::into(node_id).to_string()),
-        )
-        .await?;
-        let rpc_handler = Arc::new(RpcHandler::new(opts.cluster_addrs.clone()));
-        let raft = Raft::new(
-            node_id,
-            nodes,
-            Config::default(),
-            store.clone(),
-            storage,
-            rpc_handler.clone(),
-        );
+        let rpc_client = Arc::new(RpcClient::new(opts.cluster_addrs.clone()));
+        let raft = {
+            let config = Config::default();
+            let store = store.clone();
+            let rpc_handler = rpc_client.clone();
+            match opts.storage {
+                RaftStorageKind::Disk => {
+                    let storage =
+                        DiskStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string()))
+                            .await?;
+                    Raft::new(node_id, nodes, config, store, storage, rpc_handler)
+                }
+                RaftStorageKind::Memory => {
+                    let storage = MemoryStorage::new();
+                    Raft::new(node_id, nodes, config, store, storage, rpc_handler)
+                }
+            }
+        };
+        let publisher = Publisher::new(32768);
         let conn_limit = Arc::new(Semaphore::new(opts.max_num_clients));
         Ok(Self {
-            raft,
             opts,
+            raft,
             store,
+            rpc_client,
+            publisher,
             started_at,
             conn_limit,
-            publisher: Publisher::new(32768),
-            rpc_handler,
         })
     }
 }
