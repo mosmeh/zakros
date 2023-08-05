@@ -1,6 +1,7 @@
 pub mod command;
 pub mod error;
 pub mod lockable;
+pub mod pubsub;
 pub mod resp;
 
 mod string;

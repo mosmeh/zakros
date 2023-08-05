@@ -1,5 +1,6 @@
 mod cluster;
 mod generic;
+mod pubsub;
 mod server;
 
 use crate::{store::StoreCommand, Shared};
@@ -13,6 +14,7 @@ use zakros_raft::Error as RaftError;
 use zakros_redis::{
     command::{Arity, RedisCommand, SystemCommand, TransactionCommand},
     error::{ConnectionError, Error as RedisError, ResponseError},
+    pubsub::{Subscriber, SubscriberRecvError},
     resp::{RespCodec, Value},
 };
 
@@ -32,15 +34,18 @@ struct RedisConnection {
     framed: Framed<TcpStream, RespCodec>,
     txn: Transaction,
     is_readonly: bool,
+    subscriber: Subscriber,
 }
 
 impl RedisConnection {
     pub(crate) fn new(shared: Arc<Shared>, conn: TcpStream) -> Self {
+        let subscriber = shared.publisher.subscriber();
         Self {
             shared,
             framed: Framed::new(conn, RespCodec::default()),
             txn: Transaction::Inactive,
             is_readonly: false,
+            subscriber,
         }
     }
 
@@ -84,6 +89,7 @@ impl RedisConnection {
                     }
                     RaftError::Shutdown => panic!("Raft server is shut down"),
                 },
+                Err(Error::SubscriberRecv(SubscriberRecvError::Lagged)) => return Ok(()),
             }
         }
         Ok(())
@@ -184,10 +190,16 @@ impl RedisConnection {
             RedisCommand::System(command) => match command {
                 SystemCommand::Cluster => self.shared.cluster(args).await?,
                 SystemCommand::Info => self.shared.info(args),
+                SystemCommand::PSubscribe => return self.psubscribe(args).await,
+                SystemCommand::Publish => self.shared.publish(args).await,
+                SystemCommand::PubSub => self.shared.pubsub(args),
+                SystemCommand::PUnsubscribe => return self.punsubscribe(args).await,
                 SystemCommand::ReadOnly => self.readonly(args),
                 SystemCommand::ReadWrite => self.readwrite(args),
                 SystemCommand::Select => generic::select(args),
                 SystemCommand::Shutdown => generic::shutdown(args),
+                SystemCommand::Subscribe => return self.subscribe(args).await,
+                SystemCommand::Unsubscribe => return self.unsubscribe(args).await,
             },
             RedisCommand::Transaction(_) => unreachable!(),
         };
@@ -220,6 +232,9 @@ enum Error {
 
     #[error(transparent)]
     Raft(#[from] RaftError),
+
+    #[error(transparent)]
+    SubscriberRecv(#[from] SubscriberRecvError),
 }
 
 struct DebugQuery<'a>(&'a [Bytes]);

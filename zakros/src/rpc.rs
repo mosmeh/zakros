@@ -10,6 +10,7 @@ use zakros_raft::{
     },
     NodeId,
 };
+use zakros_redis::pubsub::PubSubMessage;
 
 pub struct RpcHandler {
     cluster_addrs: Vec<SocketAddr>,
@@ -74,6 +75,16 @@ impl RpcHandler {
         );
         Ok(RpcServiceClient::new(Default::default(), transport).spawn())
     }
+
+    pub async fn publish(&self, dest: NodeId, message: PubSubMessage) {
+        let _ = timeout(self.timeout, async move {
+            let Ok(client) = self.client(dest).await else {
+                return;
+            };
+            let _ = client.publish(tarpc::context::current(), message).await;
+        })
+        .await;
+    }
 }
 
 #[tarpc::service]
@@ -83,6 +94,8 @@ pub trait RpcService {
     ) -> RaftResult<AppendEntriesResponse>;
 
     async fn request_vote(request: RequestVote) -> RaftResult<RequestVoteResponse>;
+
+    async fn publish(message: PubSubMessage);
 }
 
 #[derive(Clone)]
@@ -110,5 +123,9 @@ impl RpcService for RpcServer {
         request: RequestVote,
     ) -> RaftResult<RequestVoteResponse> {
         self.0.raft.request_vote(request).await
+    }
+
+    async fn publish(self, _: Context, message: PubSubMessage) {
+        self.0.publisher.publish(message);
     }
 }

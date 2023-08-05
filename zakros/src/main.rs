@@ -17,6 +17,7 @@ use tokio::{
 };
 use tokio_util::codec::LengthDelimitedCodec;
 use zakros_raft::{config::Config, NodeId, Raft};
+use zakros_redis::pubsub::Publisher;
 
 type RaftResult<T> = Result<T, zakros_raft::Error>;
 
@@ -100,6 +101,8 @@ pub struct Shared {
     store: Store,
     started_at: SystemTime,
     conn_limit: Arc<Semaphore>,
+    publisher: Publisher,
+    rpc_handler: Arc<RpcHandler>,
 }
 
 impl Shared {
@@ -120,7 +123,7 @@ impl Shared {
             Config::default(),
             store.clone(),
             storage,
-            rpc_handler,
+            rpc_handler.clone(),
         );
         let conn_limit = Arc::new(Semaphore::new(opts.max_num_clients));
         Ok(Self {
@@ -129,6 +132,8 @@ impl Shared {
             store,
             started_at,
             conn_limit,
+            publisher: Publisher::new(32768),
+            rpc_handler,
         })
     }
 }

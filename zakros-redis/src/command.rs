@@ -3,6 +3,7 @@ mod cluster;
 mod generic;
 mod hash;
 mod list;
+mod pubsub;
 mod server;
 mod set;
 mod string;
@@ -255,10 +256,16 @@ stateless_commands! {
 system_commands! {
     Cluster,
     Info,
+    PSubscribe,
+    Publish,
+    PubSub,
+    PUnsubscribe,
     ReadOnly,
     ReadWrite,
     Select,
     Shutdown,
+    Subscribe,
+    Unsubscribe,
 }
 
 transaction_commands! {
