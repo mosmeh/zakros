@@ -6,7 +6,7 @@ use zakros_redis::RedisResult;
 const SERVER: u8 = 0x1;
 const CLIENTS: u8 = 0x2;
 const CLUSTER: u8 = 0x4;
-const ALL: u8 = SERVER | CLIENTS | CLUSTER;
+const ALL: u8 = u8::MAX;
 
 pub fn info(conn: &RedisConnection, args: &[Bytes]) -> RedisResult {
     let mut sections;

@@ -1,9 +1,8 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
-    BytesExt, Dictionary, Object, RedisResult,
+    BytesExt, Dictionary, Object, RedisError, RedisResult, ResponseError,
 };
 use bytes::{BufMut, Bytes};
 use std::collections::hash_map::Entry;
@@ -21,7 +20,7 @@ impl ReadCommandHandler for command::BitCount {
         let dict = dict.read();
         let s = match dict.get(key) {
             Some(Object::String(s)) => s,
-            Some(_) => return Err(Error::WrongType),
+            Some(_) => return Err(RedisError::WrongType),
             None => return Ok(0.into()),
         };
         if s.is_empty() {
@@ -105,7 +104,7 @@ impl WriteCommandHandler for command::BitOp {
             _ => return Err(ResponseError::SyntaxError.into()),
         };
         if op == BitOp::Not && keys.len() != 1 {
-            return Err(Error::Response(ResponseError::Other(
+            return Err(RedisError::Response(ResponseError::Other(
                 "BITOP NOT must be called with a single source key.",
             )));
         }
@@ -118,7 +117,7 @@ impl WriteCommandHandler for command::BitOp {
                     sources.push(s.iter().fuse());
                     max_len = max_len.max(s.len());
                 }
-                Some(_) => return Err(Error::WrongType),
+                Some(_) => return Err(RedisError::WrongType),
                 None => (),
             }
         }
@@ -171,7 +170,7 @@ impl ReadCommandHandler for command::GetBit {
         let dict = dict.read();
         let s = match dict.get(key) {
             Some(Object::String(s)) => s,
-            Some(_) => return Err(Error::WrongType),
+            Some(_) => return Err(RedisError::WrongType),
             None => return Ok(0.into()),
         };
         let (byte_index, bit_offset) = decompose_offset(offset as usize);
@@ -204,7 +203,7 @@ impl WriteCommandHandler for command::SetBit {
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::String(s) = entry.get_mut() else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 if s.len() < required_len {
                     s.resize(required_len, 0);

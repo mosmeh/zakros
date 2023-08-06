@@ -1,14 +1,12 @@
-use crate::{store::StoreCommand, RaftResult, Shared};
+use crate::{store::StoreCommand, Shared};
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tarpc::{context::Context, tokio_serde::formats::Bincode};
 use tokio::{io::AsyncWriteExt, net::TcpStream, time::timeout};
 use tokio_util::codec::LengthDelimitedCodec;
 use zakros_raft::{
-    transport::{
-        AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport,
-    },
-    NodeId,
+    rpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport},
+    NodeId, RaftResult,
 };
 use zakros_redis::pubsub::PubSubMessage;
 

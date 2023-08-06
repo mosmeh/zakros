@@ -1,4 +1,4 @@
-use crate::{error::ConnectionError, RedisResult};
+use crate::RedisResult;
 use bstr::ByteSlice;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{fmt::Debug, io::Write, str::FromStr};
@@ -66,6 +66,27 @@ impl Value {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum RespError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error("Protocol error: {0}")]
+    Protocol(#[from] ProtocolError),
+}
+
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
+pub enum ProtocolError {
+    #[error("invalid multibulk length")]
+    InvalidMultibulkLength,
+
+    #[error("invalid bulk length")]
+    InvalidBulkLength,
+
+    #[error("expected '{}', got '{}'", char::from(*.expected), char::from(*.got))]
+    UnexpectedByte { expected: u8, got: u8 },
+}
+
 #[derive(Default)]
 pub struct RespCodec {
     array_len: Option<usize>,
@@ -74,31 +95,43 @@ pub struct RespCodec {
 
 impl Decoder for RespCodec {
     type Item = Vec<Bytes>;
-    type Error = ConnectionError;
+    type Error = RespError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        if src.is_empty() {
+            return Ok(None);
+        }
+        if self.array_len.is_some() || src[0] == b'*' {
+            self.decode_multibulk(src).map_err(Into::into)
+        } else {
+            unimplemented!("inline protocol")
+        }
+    }
+}
+
+impl RespCodec {
+    fn decode_multibulk(
+        &mut self,
+        src: &mut BytesMut,
+    ) -> Result<Option<Vec<Bytes>>, ProtocolError> {
         fn parse_bytes<T: FromStr>(s: &[u8]) -> Result<T, ()> {
             s.to_str().map_err(|_| ())?.parse().map_err(|_| ())
         }
 
         let array_len = match self.array_len {
             None => {
-                let end = match src.find_byte(b'\r') {
+                let header_end = match src.find_byte(b'\r') {
                     Some(end) if end + 1 < src.len() => end, // if there is a room for trailing \n
                     _ => return Ok(None),
                 };
-                let len: i32 = match &src[..end] {
-                    [] => 0, // empty
-                    [b'*', len_bytes @ ..] => parse_bytes(len_bytes).map_err(|_| {
-                        ConnectionError::Protocol("invalid multibulk length".to_owned())
-                    })?, // array
-                    _ => {
-                        return Err(ConnectionError::Protocol(
-                            "inline protocol is not implemented".to_owned(),
-                        ))
+                let len: i32 = match &src[..header_end] {
+                    [] => 0,
+                    [b'*', len_bytes @ ..] => {
+                        parse_bytes(len_bytes).map_err(|_| ProtocolError::InvalidMultibulkLength)?
                     }
+                    _ => return Err(ProtocolError::InvalidMultibulkLength),
                 };
-                src.advance(end + 2); // 2 for skipping \r\n
+                src.advance(header_end + 2); // 2 for skipping \r\n
                 if len <= 0 {
                     return Ok(Some(Vec::new()));
                 }
@@ -113,23 +146,25 @@ impl Decoder for RespCodec {
         };
 
         for _ in self.array.len()..array_len {
-            let end = match src.find_byte(b'\r') {
+            let header_end = match src.find_byte(b'\r') {
                 Some(end) if end + 1 < src.len() => end,
                 _ => return Ok(None),
             };
-            // expect bulk string
-            let [b'$', len_bytes @ ..] = &src[..end] else {
-                return Err(ConnectionError::Protocol(format!(
-                    "expected '$', got '{}'",
-                    char::from(src[0])
-                )));
+            let [b'$', len_bytes @ ..] = &src[..header_end] else {
+                return Err(ProtocolError::UnexpectedByte {
+                    expected: b'$',
+                    got: src[0],
+                });
             };
-            let len: usize = parse_bytes(len_bytes)
-                .map_err(|_| ConnectionError::Protocol("invalid bulk length".to_owned()))?;
-            if end + 2 + len + 2 > src.len() {
+            let len: usize =
+                parse_bytes(len_bytes).map_err(|_| ProtocolError::InvalidBulkLength)?;
+            let header_line_end = header_end + 2;
+            let bulk_line_end = header_line_end + len + 2;
+            if bulk_line_end > src.len() {
+                src.reserve(bulk_line_end - src.len());
                 return Ok(None);
             }
-            src.advance(end + 2);
+            src.advance(header_line_end);
             self.array.push(src.split_to(len).freeze());
             src.advance(2);
         }

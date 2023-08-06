@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use zakros_redis::{error::ResponseError, resp::Value, BytesExt, RedisResult};
+use zakros_redis::{resp::Value, BytesExt, RedisResult, ResponseError};
 
 pub fn select(args: &[Bytes]) -> RedisResult {
     let [index] = args else {

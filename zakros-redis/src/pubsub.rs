@@ -43,7 +43,7 @@ impl Publisher {
             .read()
             .channels
             .keys()
-            .filter(|channel| crate::string_match(pattern, channel))
+            .filter(|channel| crate::string::string_match(pattern, channel))
             .cloned()
             .collect()
     }
@@ -75,7 +75,7 @@ impl Shared {
             num_receivers += tx.send(payload.clone()).unwrap()
         }
         for (pattern, tx) in &self.patterns {
-            if crate::string_match(pattern, &channel) {
+            if crate::string::string_match(pattern, &channel) {
                 num_receivers += tx
                     .send(PubSubMessage {
                         channel: channel.clone(),
@@ -242,7 +242,7 @@ impl Stream for Subscriber {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubscriberRecvError {
-    #[error("The subscriber lagged too far behind")]
+    #[error("subscriber lagged too far behind")]
     Lagged,
 }
 

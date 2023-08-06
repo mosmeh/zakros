@@ -3,12 +3,7 @@ use crate::connection::RedisConnection;
 use bytes::Bytes;
 use futures::{SinkExt, StreamExt};
 use zakros_raft::NodeId;
-use zakros_redis::{
-    error::{Error as RedisError, ResponseError},
-    pubsub::PubSubMessage,
-    resp::Value,
-    RedisResult,
-};
+use zakros_redis::{pubsub::PubSubMessage, resp::Value, RedisError, RedisResult, ResponseError};
 
 pub async fn psubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), Error> {
     if args.is_empty() {

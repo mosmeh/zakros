@@ -1,10 +1,9 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
     resp::Value,
-    BytesExt, Dictionary, Object, RedisResult,
+    BytesExt, Dictionary, Object, RedisError, RedisResult, ResponseError,
 };
 use bytes::Bytes;
 use std::collections::hash_map::Entry;
@@ -22,7 +21,7 @@ impl WriteCommandHandler for command::Append {
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::String(s) = entry.get_mut() else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 s.extend_from_slice(value);
                 Ok((s.len() as i64).into())
@@ -48,7 +47,7 @@ impl ReadCommandHandler for command::Get {
         };
         match dict.read().get(key) {
             Some(Object::String(value)) => Ok(Bytes::from(value.clone()).into()),
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(Value::Null),
         }
     }
@@ -85,7 +84,7 @@ impl ReadCommandHandler for command::GetRange {
                     Bytes::copy_from_slice(&s[start as usize..=end as usize]).into()
                 })
             }
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(Value::BulkString(Bytes::new())),
         }
     }
@@ -106,7 +105,7 @@ impl WriteCommandHandler for command::GetDel {
             return Ok(Value::Null);
         };
         let Object::String(s) = entry.get() else {
-            return Err(Error::WrongType);
+            return Err(RedisError::WrongType);
         };
         let value = s.clone();
         entry.remove();
@@ -127,7 +126,7 @@ impl WriteCommandHandler for command::GetSet {
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::String(s) = entry.get_mut() else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 let prev_value = std::mem::replace(s, value.to_vec());
                 Ok(Bytes::from(prev_value).into())
@@ -235,7 +234,7 @@ impl WriteCommandHandler for command::Set {
             Entry::Occupied(mut entry) => {
                 if get {
                     let Object::String(s) = entry.get_mut() else {
-                        return Err(Error::WrongType);
+                        return Err(RedisError::WrongType);
                     };
                     let prev_value = if nx {
                         s.clone()
@@ -293,11 +292,11 @@ impl WriteCommandHandler for command::SetRange {
         let offset = offset
             .to_i64()?
             .try_into()
-            .map_err(|_| Error::Response(ResponseError::ValueOutOfRange))?;
+            .map_err(|_| RedisError::Response(ResponseError::ValueOutOfRange))?;
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::String(s) = entry.get_mut() else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 if value.is_empty() {
                     return Ok((s.len() as i64).into());
@@ -336,7 +335,7 @@ impl ReadCommandHandler for command::StrLen {
         };
         match dict.read().get(key) {
             Some(Object::String(s)) => Ok((s.len() as i64).into()),
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(0.into()),
         }
     }

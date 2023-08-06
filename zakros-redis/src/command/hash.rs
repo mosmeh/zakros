@@ -1,10 +1,9 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
     resp::Value,
-    Dictionary, Object, RedisResult,
+    Dictionary, Object, RedisError, RedisResult, ResponseError,
 };
 use bytes::Bytes;
 use std::collections::{hash_map::Entry, HashMap};
@@ -27,7 +26,7 @@ impl WriteCommandHandler for command::HDel {
             return Ok(0.into());
         };
         let Object::Hash(hash) = entry.get_mut() else {
-            return Err(Error::WrongType);
+            return Err(RedisError::WrongType);
         };
         let mut num_removed = 0;
         for field in fields {
@@ -55,7 +54,7 @@ impl ReadCommandHandler for command::HExists {
         };
         match dict.read().get(key) {
             Some(Object::Hash(hash)) => Ok((hash.contains_key(field) as i64).into()),
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(0.into()),
         }
     }
@@ -76,7 +75,7 @@ impl ReadCommandHandler for command::HGet {
                 Some(value) => Ok(value.clone().into()),
                 None => Ok(Value::Null),
             },
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(Value::Null),
         }
     }
@@ -152,7 +151,7 @@ impl ReadCommandHandler for command::HMGet {
                     .collect();
                 Ok(Value::Array(values))
             }
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(vec![Ok(Value::Null); fields.len()].into()),
         }
     }
@@ -185,7 +184,7 @@ impl ReadCommandHandler for command::HStrLen {
                 Some(value) => Ok((value.len() as i64).into()),
                 None => Ok(0.into()),
             },
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(0.into()),
         }
     }
@@ -206,7 +205,7 @@ impl WriteCommandHandler for command::HSet {
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::Hash(hash) = entry.get_mut() else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 let mut num_added = 0;
                 for pair in pairs.chunks_exact(2) {
@@ -243,7 +242,7 @@ impl WriteCommandHandler for command::HSetNx {
         let was_set = match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::Hash(hash) = entry.get_mut() else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 match hash.entry(field.clone()) {
                     Entry::Occupied(_) => false,
@@ -291,7 +290,7 @@ where
     };
     match dict.read().get(key) {
         Some(Object::Hash(hash)) => Ok(f(hash)),
-        Some(_) => Err(Error::WrongType),
+        Some(_) => Err(RedisError::WrongType),
         None => Ok(Value::Array(Vec::new())),
     }
 }

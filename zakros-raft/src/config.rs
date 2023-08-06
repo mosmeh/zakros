@@ -55,6 +55,6 @@ impl ConfigBuilder {
 
 #[derive(thiserror::Error, Debug)]
 pub enum ConfigError {
-    #[error("election timeout has to meet min < max")]
+    #[error("election timeout range has to satisfy min < max")]
     InvalidElectionTimeoutRange,
 }

@@ -1,8 +1,8 @@
-use crate::{connection::RedisConnection, RaftResult};
+use crate::connection::RedisConnection;
 use bytes::Bytes;
 use std::net::SocketAddr;
-use zakros_raft::{Error as RaftError, NodeId};
-use zakros_redis::{error::ResponseError, resp::Value, RedisResult};
+use zakros_raft::{NodeId, RaftError, RaftResult};
+use zakros_redis::{resp::Value, RedisResult, ResponseError};
 
 pub async fn cluster(conn: &mut RedisConnection, args: &[Bytes]) -> RaftResult<RedisResult> {
     let [subcommand, _args @ ..] = args else {

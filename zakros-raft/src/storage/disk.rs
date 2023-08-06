@@ -15,7 +15,7 @@ use tokio_util::codec::{Decoder, Encoder, Framed, FramedRead};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DiskStorageError {
-    #[error("Index is too large")]
+    #[error("index is too large")]
     IndexTooLarge,
 
     #[error(transparent)]
@@ -31,6 +31,49 @@ pub struct DiskStorage<C> {
     framed: Framed<File, EntryCodec<C>>,
     offsets: Vec<u64>,
     current_offset: u64,
+}
+
+impl<C> DiskStorage<C> {
+    pub async fn new(dir_path: impl Into<PathBuf>) -> Result<Self, DiskStorageError> {
+        let dir_path = dir_path.into();
+        tokio::fs::create_dir_all(&dir_path).await?;
+        let dir = File::open(&dir_path).await.ok();
+        let mut file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(dir_path.join("log"))
+            .await?;
+        let mut size_reader = FramedRead::new(&mut file, SizeDecoder::default());
+        let mut offsets = Vec::new();
+        let mut current_offset = 0;
+        while let Some(size) = size_reader.next().await {
+            offsets.push(current_offset);
+            current_offset += size? + HEADER_SIZE as u64;
+        }
+        let framed = Framed::new(file, EntryCodec::default());
+        Ok(Self {
+            dir_path,
+            dir,
+            framed,
+            offsets,
+            current_offset,
+        })
+    }
+
+    fn file(&mut self) -> &mut File {
+        self.framed.get_mut()
+    }
+}
+
+impl<C: Serialize> DiskStorage<C> {
+    async fn flush(&mut self) -> Result<(), DiskStorageError> {
+        if !self.framed.write_buffer().is_empty() {
+            self.file().seek(SeekFrom::End(0)).await?;
+            self.framed.flush().await?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -142,49 +185,6 @@ where
     async fn persist_entries(&mut self) -> Result<(), Self::Error> {
         self.flush().await?;
         self.file().sync_data().await?;
-        Ok(())
-    }
-}
-
-impl<C> DiskStorage<C> {
-    pub async fn new(dir_path: impl Into<PathBuf>) -> Result<Self, DiskStorageError> {
-        let dir_path = dir_path.into();
-        tokio::fs::create_dir_all(&dir_path).await?;
-        let dir = File::open(&dir_path).await.ok();
-        let mut file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(dir_path.join("log"))
-            .await?;
-        let mut size_reader = FramedRead::new(&mut file, SizeDecoder::default());
-        let mut offsets = Vec::new();
-        let mut current_offset = 0;
-        while let Some(size) = size_reader.next().await {
-            offsets.push(current_offset);
-            current_offset += size? + HEADER_SIZE as u64;
-        }
-        let framed = Framed::new(file, EntryCodec::default());
-        Ok(Self {
-            dir_path,
-            dir,
-            framed,
-            offsets,
-            current_offset,
-        })
-    }
-
-    fn file(&mut self) -> &mut File {
-        self.framed.get_mut()
-    }
-}
-
-impl<C: Serialize> DiskStorage<C> {
-    async fn flush(&mut self) -> Result<(), DiskStorageError> {
-        if !self.framed.write_buffer().is_empty() {
-            self.file().seek(SeekFrom::End(0)).await?;
-            self.framed.flush().await?;
-        }
         Ok(())
     }
 }

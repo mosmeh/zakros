@@ -1,10 +1,9 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, StatelessCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::ResponseError,
     lockable::{ReadLockable, RwLockable},
     resp::Value,
-    Dictionary, RedisResult,
+    Dictionary, RedisResult, ResponseError,
 };
 use bytes::Bytes;
 use std::time::{Duration, SystemTime};

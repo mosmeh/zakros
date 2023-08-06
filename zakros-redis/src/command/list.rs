@@ -1,10 +1,9 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
     resp::Value,
-    BytesExt, Dictionary, Object, RedisResult,
+    BytesExt, Dictionary, Object, RedisError, RedisResult, ResponseError,
 };
 use bytes::Bytes;
 use std::collections::{hash_map::Entry, VecDeque};
@@ -22,7 +21,7 @@ impl ReadCommandHandler for command::LIndex {
         let dict = dict.read();
         let list = match dict.get(key) {
             Some(Object::List(list)) => list,
-            Some(_) => return Err(Error::WrongType),
+            Some(_) => return Err(RedisError::WrongType),
             None => return Ok(Value::Null),
         };
         let mut index = index.to_i64()?;
@@ -50,7 +49,7 @@ impl ReadCommandHandler for command::LLen {
         };
         match dict.read().get(key) {
             Some(Object::List(list)) => Ok((list.len() as i64).into()),
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(0.into()),
         }
     }
@@ -104,7 +103,7 @@ impl ReadCommandHandler for command::LRange {
         let dict = dict.read();
         let list = match dict.get(key) {
             Some(Object::List(list)) => list,
-            Some(_) => return Err(Error::WrongType),
+            Some(_) => return Err(RedisError::WrongType),
             None => return Ok(Value::Null),
         };
         let len = list.len() as i64;
@@ -141,7 +140,7 @@ impl WriteCommandHandler for command::LSet {
         let mut dict = dict.write();
         let list = match dict.get_mut(key) {
             Some(Object::List(list)) => list,
-            Some(_) => return Err(Error::WrongType),
+            Some(_) => return Err(RedisError::WrongType),
             None => return Err(ResponseError::NoKey.into()),
         };
         let mut index = index.to_i64()?;
@@ -173,7 +172,7 @@ impl WriteCommandHandler for command::LTrim {
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::List(list) = entry.get_mut() else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 let len = list.len() as i64;
                 if start < 0 {
@@ -219,14 +218,14 @@ impl WriteCommandHandler for command::RPopLPush {
         let mut dict = dict.write();
         match dict.get(destination) {
             Some(Object::List(_)) | None => (),
-            Some(_) => return Err(Error::WrongType),
+            Some(_) => return Err(RedisError::WrongType),
         }
         let source_entry = dict.entry(source.clone());
         let Entry::Occupied(mut source_entry) = source_entry else {
             return Ok(Value::Null);
         };
         let Object::List(source_list) = source_entry.get_mut() else {
-            return Err(Error::WrongType);
+            return Err(RedisError::WrongType);
         };
         let Some(value) = source_list.pop_back() else {
             unreachable!()
@@ -284,7 +283,7 @@ where
     match dict.write().entry(key.clone()) {
         Entry::Occupied(mut entry) => {
             let Object::List(list) = entry.get_mut() else {
-                return Err(Error::WrongType);
+                return Err(RedisError::WrongType);
             };
             list.reserve(elements.len());
             for element in elements {
@@ -316,7 +315,7 @@ where
         [key] => match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::List(list) = entry.get_mut() else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 let Some(value) = f(list) else {
                     return Ok(Value::Null);
@@ -333,7 +332,7 @@ where
             match dict.write().entry(key.clone()) {
                 Entry::Occupied(mut entry) => {
                     let Object::List(list) = entry.get_mut() else {
-                        return Err(Error::WrongType);
+                        return Err(RedisError::WrongType);
                     };
                     let mut values = Vec::with_capacity(count as usize);
                     for _ in 0..count {

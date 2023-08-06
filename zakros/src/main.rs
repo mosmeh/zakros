@@ -24,8 +24,6 @@ use zakros_raft::{
 };
 use zakros_redis::pubsub::Publisher;
 
-type RaftResult<T> = Result<T, zakros_raft::Error>;
-
 #[derive(Debug, Clone, ValueEnum)]
 enum RaftStorageKind {
     Disk,

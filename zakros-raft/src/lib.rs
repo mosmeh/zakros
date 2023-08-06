@@ -1,19 +1,17 @@
 pub mod config;
+pub mod rpc;
 pub mod storage;
-pub mod transport;
 
 mod server;
 
 use async_trait::async_trait;
 use config::Config;
+use rpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport};
 use serde::{Deserialize, Serialize};
 use server::{Message, Server};
 use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 use storage::Storage;
 use tokio::sync::{mpsc, oneshot};
-use transport::{
-    AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport,
-};
 
 #[derive(Clone)]
 pub struct Raft<C: Command> {
@@ -44,47 +42,50 @@ impl<C: Command> Raft<C> {
         Self { tx }
     }
 
-    pub async fn write(&self, command: C) -> Result<C::Output, Error> {
+    pub async fn write(&self, command: C) -> Result<C::Output, RaftError> {
         let (tx, rx) = oneshot::channel();
         self.tx
             .send(Message::Write(command, tx))
-            .map_err(|_| Error::Shutdown)?;
-        rx.await.map_err(|_| Error::Shutdown)?
+            .map_err(|_| RaftError::Shutdown)?;
+        rx.await.map_err(|_| RaftError::Shutdown)?
     }
 
-    pub async fn read(&self) -> Result<(), Error> {
+    pub async fn read(&self) -> Result<(), RaftError> {
         let (tx, rx) = oneshot::channel();
         self.tx
             .send(Message::Read(tx))
-            .map_err(|_| Error::Shutdown)?;
-        rx.await.map_err(|_| Error::Shutdown)?
+            .map_err(|_| RaftError::Shutdown)?;
+        rx.await.map_err(|_| RaftError::Shutdown)?
     }
 
     pub async fn append_entries(
         &self,
         request: AppendEntries<C>,
-    ) -> Result<AppendEntriesResponse, Error> {
+    ) -> Result<AppendEntriesResponse, RaftError> {
         let (tx, rx) = oneshot::channel();
         self.tx
             .send(Message::AppendEntries(request, tx))
-            .map_err(|_| Error::Shutdown)?;
-        rx.await.map_err(|_| Error::Shutdown)
+            .map_err(|_| RaftError::Shutdown)?;
+        rx.await.map_err(|_| RaftError::Shutdown)
     }
 
-    pub async fn request_vote(&self, request: RequestVote) -> Result<RequestVoteResponse, Error> {
+    pub async fn request_vote(
+        &self,
+        request: RequestVote,
+    ) -> Result<RequestVoteResponse, RaftError> {
         let (tx, rx) = oneshot::channel();
         self.tx
             .send(Message::RequestVote(request, tx))
-            .map_err(|_| Error::Shutdown)?;
-        rx.await.map_err(|_| Error::Shutdown)
+            .map_err(|_| RaftError::Shutdown)?;
+        rx.await.map_err(|_| RaftError::Shutdown)
     }
 
-    pub async fn status(&self) -> Result<Status, Error> {
+    pub async fn status(&self) -> Result<Status, RaftError> {
         let (tx, rx) = oneshot::channel();
         self.tx
             .send(Message::Status(tx))
-            .map_err(|_| Error::Shutdown)?;
-        rx.await.map_err(|_| Error::Shutdown)
+            .map_err(|_| RaftError::Shutdown)?;
+        rx.await.map_err(|_| RaftError::Shutdown)
     }
 }
 
@@ -170,13 +171,15 @@ pub struct Metadata {
 }
 
 #[derive(thiserror::Error, Debug, Clone, Serialize, Deserialize)]
-pub enum Error {
+pub enum RaftError {
     #[error("Raft server is shut down")]
     Shutdown,
 
-    #[error("This is not a leader node")]
+    #[error("this is not a leader node")]
     NotLeader { leader_id: Option<NodeId> },
 }
+
+pub type RaftResult<T> = Result<T, RaftError>;
 
 pub trait Command: Send + Sync + Clone + 'static {
     type Output: Send;

@@ -1,9 +1,8 @@
 use crate::{
+    rpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport},
     storage::{Storage, StorageExt},
-    transport::{
-        AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport,
-    },
-    Command, Config, Entry, EntryKind, Error, Metadata, Node, NodeId, State, StateMachine, Status,
+    Command, Config, Entry, EntryKind, Metadata, Node, NodeId, RaftError, State, StateMachine,
+    Status,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
 use std::{
@@ -410,10 +409,14 @@ where
         }
     }
 
-    async fn handle_write(&mut self, command: C, tx: oneshot::Sender<Result<C::Output, Error>>) {
+    async fn handle_write(
+        &mut self,
+        command: C,
+        tx: oneshot::Sender<Result<C::Output, RaftError>>,
+    ) {
         if self.state != State::Leader {
             tracing::trace!("rejecting write request");
-            let _ = tx.send(Err(Error::NotLeader {
+            let _ = tx.send(Err(RaftError::NotLeader {
                 leader_id: self.leader_id,
             }));
             return;
@@ -439,7 +442,7 @@ where
         self.flush().await;
     }
 
-    async fn handle_read(&mut self, tx: oneshot::Sender<Result<(), Error>>) {
+    async fn handle_read(&mut self, tx: oneshot::Sender<Result<(), RaftError>>) {
         if self.state == State::Leader {
             let index = self.storage.current_index();
             tracing::trace!(index, "pending read request",);
@@ -452,7 +455,7 @@ where
             self.flush().await;
         } else {
             tracing::trace!("rejecting read request");
-            let _ = tx.send(Err(Error::NotLeader {
+            let _ = tx.send(Err(RaftError::NotLeader {
                 leader_id: self.leader_id,
             }));
         }
@@ -472,7 +475,7 @@ where
                 break;
             }
             let request = self.pending_write_requests.pop_back().unwrap();
-            let _ = request.tx.send(Err(Error::NotLeader {
+            let _ = request.tx.send(Err(RaftError::NotLeader {
                 leader_id: self.leader_id,
             }));
         }
@@ -534,7 +537,7 @@ where
 
         if self.state != State::Leader {
             for request in self.pending_read_requests.drain(..) {
-                let _ = request.tx.send(Err(Error::NotLeader {
+                let _ = request.tx.send(Err(RaftError::NotLeader {
                     leader_id: self.leader_id,
                 }));
             }
@@ -755,8 +758,8 @@ where
 pub enum Message<C: Command> {
     AppendEntries(AppendEntries<C>, oneshot::Sender<AppendEntriesResponse>),
     RequestVote(RequestVote, oneshot::Sender<RequestVoteResponse>),
-    Write(C, oneshot::Sender<Result<C::Output, Error>>),
-    Read(oneshot::Sender<Result<(), Error>>),
+    Write(C, oneshot::Sender<Result<C::Output, RaftError>>),
+    Read(oneshot::Sender<Result<(), RaftError>>),
     Status(oneshot::Sender<Status>),
 }
 
@@ -768,12 +771,12 @@ struct RpcResponse<R, E> {
 #[derive(Debug)]
 struct WriteRequest<O> {
     index: u64,
-    tx: oneshot::Sender<Result<O, Error>>,
+    tx: oneshot::Sender<Result<O, RaftError>>,
 }
 
 #[derive(Debug)]
 struct ReadRequest {
     index: u64,
     message_index: u64,
-    tx: oneshot::Sender<Result<(), Error>>,
+    tx: oneshot::Sender<Result<(), RaftError>>,
 }

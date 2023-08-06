@@ -10,9 +10,11 @@ use futures::SinkExt;
 use generic::*;
 use pubsub::*;
 use server::*;
+use zakros_raft::RaftError;
 use zakros_redis::{
     command::{RedisCommand, SystemCommand},
     pubsub::SubscriberRecvError,
+    RedisError,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -21,10 +23,10 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    Redis(#[from] zakros_redis::error::Error),
+    Redis(#[from] RedisError),
 
     #[error(transparent)]
-    Raft(#[from] zakros_raft::Error),
+    Raft(#[from] RaftError),
 
     #[error(transparent)]
     SubscriberRecv(#[from] SubscriberRecvError),

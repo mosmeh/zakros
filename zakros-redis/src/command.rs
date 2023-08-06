@@ -10,9 +10,8 @@ mod string;
 mod transaction;
 
 use crate::{
-    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
-    Dictionary, RedisResult,
+    Dictionary, RedisError, RedisResult, ResponseError,
 };
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -40,7 +39,7 @@ impl Display for RedisCommand {
 }
 
 impl TryFrom<&[u8]> for RedisCommand {
-    type Error = Error;
+    type Error = RedisError;
 
     fn try_from(name: &[u8]) -> Result<Self, Self::Error> {
         let bytes = &name.to_ascii_uppercase();

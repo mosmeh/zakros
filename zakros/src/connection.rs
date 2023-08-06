@@ -8,12 +8,12 @@ use futures::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::{net::TcpStream, sync::TryAcquireError};
 use tokio_util::codec::Framed;
-use zakros_raft::Error as RaftError;
+use zakros_raft::RaftError;
 use zakros_redis::{
     command::{Arity, RedisCommand, TransactionCommand},
-    error::{ConnectionError, Error as RedisError, ResponseError},
     pubsub::{Subscriber, SubscriberRecvError},
-    resp::{RespCodec, Value},
+    resp::{RespCodec, RespError, Value},
+    RedisError, ResponseError,
 };
 
 pub async fn serve(shared: Arc<Shared>, mut conn: TcpStream) -> std::io::Result<()> {
@@ -51,8 +51,8 @@ impl RedisConnection {
         while let Some(decoded) = self.framed.next().await {
             let strings = match decoded {
                 Ok(strings) => strings,
-                Err(ConnectionError::Io(err)) => return Err(err),
-                Err(ConnectionError::Protocol(err)) => {
+                Err(RespError::Io(err)) => return Err(err),
+                Err(RespError::Protocol(err)) => {
                     return self
                         .framed
                         .send(Err(ResponseError::ProtocolError(err).into()))

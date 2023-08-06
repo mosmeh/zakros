@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MemoryStorageError {
-    #[error("Index is too large")]
+    #[error("index is too large")]
     IndexTooLarge,
 }
 

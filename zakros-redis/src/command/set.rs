@@ -1,10 +1,9 @@
 use super::{Arity, CommandSpec, ReadCommandHandler, WriteCommandHandler};
 use crate::{
     command,
-    error::{Error, ResponseError},
     lockable::{ReadLockable, RwLockable},
     resp::Value,
-    Dictionary, Object, RedisResult,
+    Dictionary, Object, RedisError, RedisResult, ResponseError,
 };
 use bytes::Bytes;
 use std::collections::{hash_map::Entry, HashSet};
@@ -24,7 +23,7 @@ impl WriteCommandHandler for command::SAdd {
         match dict.write().entry(key.clone()) {
             Entry::Occupied(mut entry) => {
                 let Object::Set(set) = entry.get_mut() else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 let mut num_inserted = 0;
                 for member in members {
@@ -54,7 +53,7 @@ impl ReadCommandHandler for command::SCard {
         };
         match dict.read().get(key) {
             Some(Object::Set(set)) => Ok((set.len() as i64).into()),
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(0.into()),
         }
     }
@@ -116,7 +115,7 @@ impl ReadCommandHandler for command::SIsMember {
         };
         match dict.read().get(key) {
             Some(Object::Set(set)) => Ok((set.contains(member) as i64).into()),
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(0.into()),
         }
     }
@@ -137,7 +136,7 @@ impl ReadCommandHandler for command::SMembers {
                 let members: Vec<_> = set.iter().map(|member| Ok(member.clone().into())).collect();
                 Ok(members.into())
             }
-            Some(_) => Err(Error::WrongType),
+            Some(_) => Err(RedisError::WrongType),
             None => Ok(Value::Array(Vec::new())),
         }
     }
@@ -158,7 +157,7 @@ impl ReadCommandHandler for command::SMIsMember {
         let responses = match dict.read().get(key) {
             Some(hash) => {
                 let Object::Set(hash) = hash else {
-                    return Err(Error::WrongType);
+                    return Err(RedisError::WrongType);
                 };
                 members
                     .iter()
@@ -184,14 +183,14 @@ impl WriteCommandHandler for command::SMove {
         let mut dict = dict.write();
         match dict.get(destination) {
             Some(Object::Set(_)) | None => (),
-            Some(_) => return Err(Error::WrongType),
+            Some(_) => return Err(RedisError::WrongType),
         }
         let source_entry = dict.entry(source.clone());
         let Entry::Occupied(mut source_entry) = source_entry else {
             return Ok(0.into());
         };
         let Object::Set(source_set) = source_entry.get_mut() else {
-            return Err(Error::WrongType);
+            return Err(RedisError::WrongType);
         };
         if !source_set.remove(member) {
             return Ok(0.into());
@@ -229,7 +228,7 @@ impl WriteCommandHandler for command::SRem {
             return Ok(0.into());
         };
         let Object::Set(set) = entry.get_mut() else {
-            return Err(Error::WrongType);
+            return Err(RedisError::WrongType);
         };
         let mut num_removed = 0;
         for member in members {
@@ -305,19 +304,19 @@ fn apply<F>(
     lhs_key: &[u8],
     rhs_keys: &[Bytes],
     f: F,
-) -> Result<HashSet<Bytes>, Error>
+) -> Result<HashSet<Bytes>, RedisError>
 where
     F: Fn(&mut HashSet<Bytes>, &HashSet<Bytes>),
 {
     let mut lhs_set = match dict.get(lhs_key) {
         Some(Object::Set(set)) => set.clone(),
-        Some(_) => return Err(Error::WrongType),
+        Some(_) => return Err(RedisError::WrongType),
         None => Default::default(),
     };
     for rhs_key in rhs_keys {
         match dict.get(rhs_key) {
             Some(Object::Set(rhs_set)) => f(&mut lhs_set, rhs_set),
-            Some(_) => return Err(Error::WrongType),
+            Some(_) => return Err(RedisError::WrongType),
             None => f(&mut lhs_set, &HashSet::new()),
         }
     }
