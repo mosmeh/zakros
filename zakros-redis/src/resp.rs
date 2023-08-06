@@ -85,6 +85,9 @@ pub enum ProtocolError {
 
     #[error("expected '{}', got '{}'", char::from(*.expected), char::from(*.got))]
     UnexpectedByte { expected: u8, got: u8 },
+
+    #[error("unbalanced quotes in request")]
+    UnbalancedQuotes,
 }
 
 #[derive(Default)]
@@ -102,10 +105,13 @@ impl Decoder for RespCodec {
             return Ok(None);
         }
         if self.array_len.is_some() || src[0] == b'*' {
-            self.decode_multibulk(src).map_err(Into::into)
+            // we will resume or start decoding multibulk
+            self.decode_multibulk(src)
         } else {
-            unimplemented!("inline protocol")
+            // inline protocol is always parsed in single call to decode()
+            decode_inline(src)
         }
+        .map_err(Into::into)
     }
 }
 
@@ -172,6 +178,19 @@ impl RespCodec {
         self.array_len = None;
         Ok(Some(std::mem::take(&mut self.array)))
     }
+}
+
+fn decode_inline(src: &mut BytesMut) -> Result<Option<Vec<Bytes>>, ProtocolError> {
+    let Some(end) = src.find_byte(b'\n') else {
+        return Ok(None);
+    };
+    let tokens = crate::string::split_args(&src[..end])
+        .map_err(|_| ProtocolError::UnbalancedQuotes)?
+        .into_iter()
+        .map(Bytes::from)
+        .collect();
+    src.advance(end + 1);
+    Ok(Some(tokens))
 }
 
 impl Encoder<RedisResult> for RespCodec {

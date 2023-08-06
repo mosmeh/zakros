@@ -1,3 +1,5 @@
+use bstr::ByteSlice;
+
 pub fn string_match(pattern: &[u8], string: &[u8]) -> bool {
     let mut skip_longer_matches = false;
     string_match_impl(pattern, string, &mut skip_longer_matches)
@@ -92,4 +94,93 @@ fn string_match_impl(pattern: &[u8], mut string: &[u8], skip_longer_matches: &mu
         }
     }
     p == pattern.len() && string.is_empty()
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SplitArgsError {
+    #[error("unbalanced quotes")]
+    UnbalancedQuotes,
+}
+
+pub fn split_args(mut line: &[u8]) -> Result<Vec<Vec<u8>>, SplitArgsError> {
+    enum State {
+        Normal,
+        InDoubleQuotes,
+        InSingleQuotes,
+    }
+
+    let mut tokens = Vec::new();
+    loop {
+        match line.find_not_byteset(b"\t\n\x0b\x0c\r ") {
+            Some(i) => line = &line[i..],
+            None => return Ok(tokens), // line is empty, or line consists only of space characters
+        }
+        let mut state = State::Normal;
+        let mut current = Vec::new();
+        loop {
+            match state {
+                State::Normal => match line.first() {
+                    Some(b' ' | b'\n' | b'\r' | b'\t') | None => break,
+                    Some(b'"') => state = State::InDoubleQuotes,
+                    Some(b'\'') => state = State::InSingleQuotes,
+                    Some(ch) => current.push(*ch),
+                },
+                State::InDoubleQuotes => match line {
+                    [b'\\', b'x', a, b, _rest @ ..]
+                        if a.is_ascii_hexdigit() && b.is_ascii_hexdigit() =>
+                    {
+                        current.push(hex_digit_to_int(*a) * 16 + hex_digit_to_int(*b));
+                        line = &line[3..];
+                    }
+                    [b'\\', ch, _rest @ ..] => {
+                        let byte = match *ch {
+                            b'n' => b'\n',
+                            b'r' => b'\r',
+                            b't' => b'\t',
+                            b'b' => 0x8,
+                            b'a' => 0x7,
+                            ch => ch,
+                        };
+                        current.push(byte);
+                        line = &line[1..];
+                    }
+                    [b'"', next, _rest @ ..] if !is_space(*next) => {
+                        return Err(SplitArgsError::UnbalancedQuotes)
+                    }
+                    [b'"', _rest @ ..] => break,
+                    [] => return Err(SplitArgsError::UnbalancedQuotes),
+                    [ch, _rest @ ..] => current.push(*ch),
+                },
+                State::InSingleQuotes => match line {
+                    [b'\\', b'\'', _rest @ ..] => {
+                        current.push(b'\'');
+                        line = &line[1..];
+                    }
+                    [b'\'', next, _rest @ ..] if !is_space(*next) => {
+                        return Err(SplitArgsError::UnbalancedQuotes)
+                    }
+                    [b'\'', _rest @ ..] => break,
+                    [] => return Err(SplitArgsError::UnbalancedQuotes),
+                    [ch, _rest @ ..] => current.push(*ch),
+                },
+            }
+            line = &line[1..];
+        }
+        line = &line[1..];
+        tokens.push(current);
+    }
+}
+
+// isspace() in C
+const fn is_space(ch: u8) -> bool {
+    matches!(ch, b'\t' | b'\n' | 0xb | 0xc | b'\r' | b' ')
+}
+
+fn hex_digit_to_int(ch: u8) -> u8 {
+    match ch {
+        b'0'..=b'9' => ch - b'0',
+        b'a'..=b'f' => ch - b'a' + 10,
+        b'A'..=b'F' => ch - b'A' + 10,
+        _ => unreachable!(),
+    }
 }
