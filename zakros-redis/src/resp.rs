@@ -1,4 +1,4 @@
-use crate::RedisResult;
+use crate::{string::SplitArgsError, RedisResult};
 use bstr::ByteSlice;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{fmt::Debug, io::Write, str::FromStr};
@@ -184,11 +184,11 @@ fn decode_inline(src: &mut BytesMut) -> Result<Option<Vec<Bytes>>, ProtocolError
     let Some(end) = src.find_byte(b'\n') else {
         return Ok(None);
     };
-    let tokens = crate::string::split_args(&src[..end])
-        .map_err(|_| ProtocolError::UnbalancedQuotes)?
-        .into_iter()
-        .map(Bytes::from)
-        .collect();
+    let tokens = match crate::string::split_args(&src[..end]) {
+        Ok(tokens) => tokens,
+        Err(SplitArgsError::UnbalancedQuotes) => return Err(ProtocolError::UnbalancedQuotes),
+    };
+    let tokens = tokens.into_iter().map(Bytes::from).collect();
     src.advance(end + 1);
     Ok(Some(tokens))
 }

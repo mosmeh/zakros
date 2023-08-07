@@ -1,5 +1,5 @@
 use crate::{
-    command::{self, Error as CommandError},
+    command::{self, CommandError},
     Shared,
 };
 use bstr::ByteSlice;

@@ -111,7 +111,7 @@ pub fn split_args(mut line: &[u8]) -> Result<Vec<Vec<u8>>, SplitArgsError> {
 
     let mut tokens = Vec::new();
     loop {
-        match line.find_not_byteset(b"\t\n\x0b\x0c\r ") {
+        match line.find_not_byteset(b" \n\r\t\x0b\x0c") {
             Some(i) => line = &line[i..],
             None => return Ok(tokens), // line is empty, or line consists only of space characters
         }
@@ -173,7 +173,7 @@ pub fn split_args(mut line: &[u8]) -> Result<Vec<Vec<u8>>, SplitArgsError> {
 
 // isspace() in C
 const fn is_space(ch: u8) -> bool {
-    matches!(ch, b'\t' | b'\n' | 0xb | 0xc | b'\r' | b' ')
+    matches!(ch, b' ' | b'\n' | b'\r' | b'\t' | 0xb | 0xc)
 }
 
 fn hex_digit_to_int(ch: u8) -> u8 {

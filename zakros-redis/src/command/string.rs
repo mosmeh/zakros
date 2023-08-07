@@ -35,6 +35,38 @@ impl WriteCommandHandler for command::Append {
     }
 }
 
+impl CommandSpec for command::Decr {
+    const NAME: &'static str = "DECR";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
+impl WriteCommandHandler for command::Decr {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
+        match args {
+            [key] => incr(dict, key, -1),
+            _ => Err(ResponseError::WrongArity.into()),
+        }
+    }
+}
+
+impl CommandSpec for command::DecrBy {
+    const NAME: &'static str = "DECRBY";
+    const ARITY: Arity = Arity::Fixed(2);
+}
+
+impl WriteCommandHandler for command::DecrBy {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
+        let [key, decrement] = args else {
+            return Err(ResponseError::WrongArity.into());
+        };
+        let decrement = decrement.to_i64()?;
+        if decrement == i64::MIN {
+            return Err(ResponseError::Other("decrement would overflow").into());
+        }
+        incr(dict, key, -decrement)
+    }
+}
+
 impl CommandSpec for command::Get {
     const NAME: &'static str = "GET";
     const ARITY: Arity = Arity::Fixed(1);
@@ -135,6 +167,34 @@ impl WriteCommandHandler for command::GetSet {
                 entry.insert(value.to_vec().into());
                 Ok(Value::Null)
             }
+        }
+    }
+}
+
+impl CommandSpec for command::Incr {
+    const NAME: &'static str = "INCR";
+    const ARITY: Arity = Arity::Fixed(1);
+}
+
+impl WriteCommandHandler for command::Incr {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
+        match args {
+            [key] => incr(dict, key, 1),
+            _ => Err(ResponseError::WrongArity.into()),
+        }
+    }
+}
+
+impl CommandSpec for command::IncrBy {
+    const NAME: &'static str = "INCRBY";
+    const ARITY: Arity = Arity::Fixed(2);
+}
+
+impl WriteCommandHandler for command::IncrBy {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
+        match args {
+            [key, increment] => incr(dict, key, increment.to_i64()?),
+            _ => Err(ResponseError::WrongArity.into()),
         }
     }
 }
@@ -349,5 +409,25 @@ impl CommandSpec for command::SubStr {
 impl ReadCommandHandler for command::SubStr {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         command::GetRange::call(dict, args)
+    }
+}
+
+fn incr<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, key: &Bytes, delta: i64) -> RedisResult {
+    match dict.write().entry(key.clone()) {
+        Entry::Occupied(mut entry) => {
+            let Object::String(s) = entry.get_mut() else {
+                return Err(RedisError::WrongType);
+            };
+            let Some(new_value) = s.to_i64()?.checked_add(delta) else {
+                return Err(ResponseError::Other("increment or decrement would overflow").into());
+            };
+            *s = new_value.to_string().into_bytes();
+            Ok(new_value.into())
+        }
+        Entry::Vacant(entry) => {
+            let s = delta.to_string().into_bytes();
+            entry.insert(s.into());
+            Ok(delta.into())
+        }
     }
 }

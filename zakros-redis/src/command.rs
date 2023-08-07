@@ -180,6 +180,8 @@ macro_rules! transaction_commands {
 write_commands! {
     Append,
     BitOp,
+    Decr,
+    DecrBy,
     Del,
     FlushAll,
     FlushDb,
@@ -189,6 +191,8 @@ write_commands! {
     HMSet,
     HSet,
     HSetNx,
+    Incr,
+    IncrBy,
     LPop,
     LPush,
     LPushX,

@@ -1,11 +1,11 @@
-use super::Error;
+use super::CommandError;
 use crate::connection::RedisConnection;
 use bytes::Bytes;
 use futures::{SinkExt, StreamExt};
 use zakros_raft::NodeId;
 use zakros_redis::{pubsub::PubSubMessage, resp::Value, RedisError, RedisResult, ResponseError};
 
-pub async fn psubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), Error> {
+pub async fn psubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), CommandError> {
     if args.is_empty() {
         return Err(RedisError::from(ResponseError::WrongArity).into());
     }
@@ -31,7 +31,7 @@ pub async fn psubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<()
     Ok(())
 }
 
-pub async fn publish(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), Error> {
+pub async fn publish(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), CommandError> {
     let [channel, message] = args else {
         return Err(RedisError::from(ResponseError::WrongArity).into());
     };
@@ -96,7 +96,7 @@ pub fn pubsub(conn: &RedisConnection, args: &[Bytes]) -> RedisResult {
     }
 }
 
-pub async fn punsubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), Error> {
+pub async fn punsubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), CommandError> {
     for pattern in args {
         conn.subscriber.unsubscribe_from_pattern(pattern.clone());
         let response = Value::Array(vec![
@@ -110,7 +110,7 @@ pub async fn punsubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<
     Ok(())
 }
 
-pub async fn subscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), Error> {
+pub async fn subscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), CommandError> {
     if args.is_empty() {
         return Err(RedisError::from(ResponseError::WrongArity).into());
     }
@@ -136,7 +136,7 @@ pub async fn subscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(),
     Ok(())
 }
 
-pub async fn unsubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), Error> {
+pub async fn unsubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), CommandError> {
     for channel in args {
         conn.subscriber.unsubscribe_from_channel(channel.clone());
         let response = Value::Array(vec![
