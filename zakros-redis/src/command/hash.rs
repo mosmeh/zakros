@@ -3,7 +3,7 @@ use crate::{
     command,
     lockable::{ReadLockable, RwLockable},
     resp::Value,
-    Dictionary, Object, RedisError, RedisResult, ResponseError,
+    BytesExt, Dictionary, Object, RedisError, RedisResult, ResponseError,
 };
 use bytes::Bytes;
 use std::collections::{hash_map::Entry, HashMap};
@@ -96,6 +96,52 @@ impl ReadCommandHandler for command::HGetAll {
             }
             Value::Array(responses)
         })
+    }
+}
+
+impl CommandSpec for command::HIncrBy {
+    const NAME: &'static str = "HINCRBY";
+    const ARITY: Arity = Arity::Fixed(3);
+}
+
+impl WriteCommandHandler for command::HIncrBy {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
+        let [key, field, increment] = args else {
+            return Err(ResponseError::WrongArity.into());
+        };
+        let increment = increment.to_i64()?;
+        match dict.write().entry(key.clone()) {
+            Entry::Occupied(mut entry) => {
+                let Object::Hash(hash) = entry.get_mut() else {
+                    return Err(RedisError::WrongType);
+                };
+                match hash.entry(field.clone()) {
+                    Entry::Occupied(mut entry) => {
+                        let value = entry.get().to_i64().map_err(|_| {
+                            RedisError::from(ResponseError::Other("hash value is not an integer"))
+                        })?;
+                        let new_value = value.checked_add(increment).ok_or_else(|| {
+                            RedisError::from(ResponseError::Other(
+                                "increment or decrement would overflow",
+                            ))
+                        })?;
+                        entry.insert(new_value.to_string().into_bytes().into());
+                        Ok(new_value.into())
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(increment.to_string().into_bytes().into());
+                        Ok(increment.into())
+                    }
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(
+                    HashMap::from([(field.clone(), increment.to_string().into_bytes().into())])
+                        .into(),
+                );
+                Ok(increment.into())
+            }
+        }
     }
 }
 
@@ -222,7 +268,7 @@ impl WriteCommandHandler for command::HSet {
                     let [field, value] = pair else { unreachable!() };
                     (field.clone(), value.clone())
                 });
-                entry.insert(Object::Hash(HashMap::from_iter(pairs)));
+                entry.insert(HashMap::from_iter(pairs).into());
                 Ok(len.into())
             }
         }
@@ -253,10 +299,7 @@ impl WriteCommandHandler for command::HSetNx {
                 }
             }
             Entry::Vacant(entry) => {
-                entry.insert(Object::Hash(HashMap::from([(
-                    field.clone(),
-                    value.clone(),
-                )])));
+                entry.insert(HashMap::from([(field.clone(), value.clone())]).into());
                 true
             }
         };

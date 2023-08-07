@@ -418,9 +418,11 @@ fn incr<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, key: &Bytes, delta: i64)
             let Object::String(s) = entry.get_mut() else {
                 return Err(RedisError::WrongType);
             };
-            let Some(new_value) = s.to_i64()?.checked_add(delta) else {
-                return Err(ResponseError::Other("increment or decrement would overflow").into());
-            };
+            let new_value = s.to_i64()?.checked_add(delta).ok_or_else(|| {
+                RedisError::from(ResponseError::Other(
+                    "increment or decrement would overflow",
+                ))
+            })?;
             *s = new_value.to_string().into_bytes();
             Ok(new_value.into())
         }

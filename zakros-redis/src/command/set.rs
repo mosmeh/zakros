@@ -34,7 +34,7 @@ impl WriteCommandHandler for command::SAdd {
                 Ok(num_inserted.into())
             }
             Entry::Vacant(entry) => {
-                entry.insert(Object::Set(HashSet::from_iter(members.iter().cloned())));
+                entry.insert(HashSet::from_iter(members.iter().cloned()).into());
                 Ok((members.len() as i64).into())
             }
         }
@@ -292,7 +292,7 @@ where
     let set = apply(&dict, lfs_key, rhs_keys, f)?;
     let len = set.len();
     if len > 0 {
-        dict.insert(destination.clone(), Object::Set(set));
+        dict.insert(destination.clone(), set.into());
     } else {
         dict.remove(destination);
     }

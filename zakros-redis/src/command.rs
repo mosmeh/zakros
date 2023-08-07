@@ -188,6 +188,7 @@ write_commands! {
     GetDel,
     GetSet,
     HDel,
+    HIncrBy,
     HMSet,
     HSet,
     HSetNx,

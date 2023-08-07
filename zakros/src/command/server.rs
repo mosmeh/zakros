@@ -1,6 +1,9 @@
 use crate::{connection::RedisConnection, Shared};
 use bytes::Bytes;
-use std::time::{Duration, SystemTime};
+use std::{
+    io::Write,
+    time::{Duration, SystemTime},
+};
 use zakros_redis::RedisResult;
 
 const SERVER: u8 = 0x1;
@@ -28,8 +31,6 @@ pub fn info(conn: &RedisConnection, args: &[Bytes]) -> RedisResult {
 }
 
 fn generate_info_str(shared: &Shared, sections: u8) -> std::io::Result<Bytes> {
-    use std::io::Write;
-
     let mut out = Vec::new();
     let mut is_first = true;
     if sections & SERVER != 0 {
@@ -68,5 +69,5 @@ fn generate_info_str(shared: &Shared, sections: u8) -> std::io::Result<Bytes> {
         out.write_all(b"# Cluster\r\n")?;
         write!(out, "cluster_enabled:1\r\n")?;
     }
-    Ok(Bytes::from(out))
+    Ok(out.into())
 }

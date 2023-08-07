@@ -79,6 +79,18 @@ impl From<Vec<u8>> for Object {
     }
 }
 
+impl From<HashSet<Bytes>> for Object {
+    fn from(value: HashSet<Bytes>) -> Self {
+        Self::Set(value)
+    }
+}
+
+impl From<HashMap<Bytes, Bytes>> for Object {
+    fn from(value: HashMap<Bytes, Bytes>) -> Self {
+        Self::Hash(value)
+    }
+}
+
 pub type Dictionary = HashMap<Bytes, Object>;
 
 pub trait BytesExt {

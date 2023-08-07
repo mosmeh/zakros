@@ -13,10 +13,12 @@ pub async fn cluster(conn: &mut RedisConnection, args: &[Bytes]) -> RaftResult<R
         b"MYID" => format_node_id(NodeId::from(shared.opts.id)),
         b"SLOTS" => {
             const CLUSTER_SLOTS: i64 = 16384;
-            let leader_id = shared.raft.status().await?.leader_id;
-            let Some(leader_id) = leader_id else {
-                return Err(RaftError::NotLeader { leader_id: None });
-            };
+            let leader_id = shared
+                .raft
+                .status()
+                .await?
+                .leader_id
+                .ok_or(RaftError::NotLeader { leader_id: None })?;
             let leader_index = Into::<u64>::into(leader_id) as usize;
             let addrs = &shared.opts.cluster_addrs;
             let mut responses = vec![Ok(0.into()), Ok((CLUSTER_SLOTS - 1).into())];
