@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 async-stream = "0.3.5"
 bstr = { version = "1.6.0", default-features = false }
-bytes = "1.4.0"
+bytes = { version = "1.4.0", features = ["serde"] }
 futures = { version = "0.3.28", default-features = false }
 parking_lot = "0.12.1"
 serde = { version = "1.0.183", features = ["derive"] }
 thiserror = "1.0.44"
 tokio = { version = "1.29.1", default-features = false, features = ["sync"] }
-tokio-util = { version = "0.7.8", features = ["io"] }
+tokio-util = { version = "0.7.8", features = ["codec"] }

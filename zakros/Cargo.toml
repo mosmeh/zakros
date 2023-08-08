@@ -8,7 +8,7 @@ anyhow = "1.0.72"
 async-trait = "0.1.72"
 bstr = { version = "1.6.0", default-features = false }
 bytes = { version = "1.4.0", features = ["serde"] }
-clap = { version = "4.3.19", features = ["derive"] }
+clap = { version = "4.3.21", features = ["derive"] }
 futures = { version = "0.3.28", default-features = false }
 parking_lot = "0.12.1"
 rand = "0.8.5"
@@ -23,7 +23,7 @@ tokio = { version = "1.29.1", features = [
 	"parking_lot",
 	"rt-multi-thread",
 ] }
-tokio-util = "0.7.8"
+tokio-util = { version = "0.7.8", features = ["codec"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["parking_lot"] }
 zakros-raft = { path = "../zakros-raft" }

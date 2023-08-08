@@ -1,0 +1,41 @@
+[package]
+name = "zakros-redis-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+bytes = "1.4.0"
+libfuzzer-sys = "0.4"
+tokio-util = { version = "0.7.8", features = ["codec"] }
+
+[dependencies.zakros-redis]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "string_match"
+path = "fuzz_targets/string_match.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "split_args"
+path = "fuzz_targets/split_args.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "resp"
+path = "fuzz_targets/resp.rs"
+test = false
+doc = false

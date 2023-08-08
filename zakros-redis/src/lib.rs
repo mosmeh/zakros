@@ -2,8 +2,7 @@ pub mod command;
 pub mod lockable;
 pub mod pubsub;
 pub mod resp;
-
-mod string;
+pub mod string;
 
 use bstr::ByteSlice;
 use bytes::Bytes;

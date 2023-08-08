@@ -31,35 +31,38 @@ fn string_match_impl(pattern: &[u8], mut string: &[u8], skip_longer_matches: &mu
             b'?' => (),
             b'[' => {
                 p += 1;
-                let not = pattern[p] == b'^';
+                let not = pattern.get(p) == Some(&b'^');
                 if not {
                     p += 1;
                 }
                 let mut match_found = false;
                 loop {
-                    if pattern[p] == b'\\' && p + 2 < pattern.len() {
-                        p += 1;
-                        if pattern[p] == string[0] {
-                            match_found = true;
+                    match pattern.get(p) {
+                        Some(&b'\\') if p + 2 < pattern.len() => {
+                            p += 1;
+                            if pattern[p] == string[0] {
+                                match_found = true;
+                            }
                         }
-                    } else if pattern[p] == b']' {
-                        break;
-                    } else if p == pattern.len() {
-                        p -= 1;
-                        break;
-                    } else if p + 3 < pattern.len() && pattern[p + 1] == b'-' {
-                        let mut start = pattern[p];
-                        let mut end = pattern[p + 2];
-                        if start > end {
-                            std::mem::swap(&mut start, &mut end);
+                        Some(&b']') => break,
+                        None => {
+                            p -= 1;
+                            break;
                         }
-                        p += 2;
-                        let c = string[0];
-                        if c >= start && c <= end {
-                            match_found = true;
+                        Some(&start) if p + 3 < pattern.len() && pattern[p + 1] == b'-' => {
+                            let mut start = start;
+                            let mut end = pattern[p + 2];
+                            if start > end {
+                                std::mem::swap(&mut start, &mut end);
+                            }
+                            p += 2;
+                            let c = string[0];
+                            if c >= start && c <= end {
+                                match_found = true;
+                            }
                         }
-                    } else if pattern[p] == string[0] {
-                        match_found = true;
+                        Some(&ch) if ch == string[0] => match_found = true,
+                        _ => (),
                     }
                     p += 1;
                 }
@@ -120,7 +123,11 @@ pub fn split_args(mut line: &[u8]) -> Result<Vec<Vec<u8>>, SplitArgsError> {
         loop {
             match state {
                 State::Normal => match line.first() {
-                    Some(b' ' | b'\n' | b'\r' | b'\t') | None => break,
+                    Some(b' ' | b'\n' | b'\r' | b'\t') => {
+                        line = &line[1..];
+                        break;
+                    }
+                    None => break,
                     Some(b'"') => state = State::InDoubleQuotes,
                     Some(b'\'') => state = State::InSingleQuotes,
                     Some(ch) => current.push(*ch),
@@ -147,7 +154,10 @@ pub fn split_args(mut line: &[u8]) -> Result<Vec<Vec<u8>>, SplitArgsError> {
                     [b'"', next, _rest @ ..] if !is_space(*next) => {
                         return Err(SplitArgsError::UnbalancedQuotes)
                     }
-                    [b'"', _rest @ ..] => break,
+                    [b'"', _rest @ ..] => {
+                        line = &line[1..];
+                        break;
+                    }
                     [] => return Err(SplitArgsError::UnbalancedQuotes),
                     [ch, _rest @ ..] => current.push(*ch),
                 },
@@ -159,14 +169,16 @@ pub fn split_args(mut line: &[u8]) -> Result<Vec<Vec<u8>>, SplitArgsError> {
                     [b'\'', next, _rest @ ..] if !is_space(*next) => {
                         return Err(SplitArgsError::UnbalancedQuotes)
                     }
-                    [b'\'', _rest @ ..] => break,
+                    [b'\'', _rest @ ..] => {
+                        line = &line[1..];
+                        break;
+                    }
                     [] => return Err(SplitArgsError::UnbalancedQuotes),
                     [ch, _rest @ ..] => current.push(*ch),
                 },
             }
             line = &line[1..];
         }
-        line = &line[1..];
         tokens.push(current);
     }
 }

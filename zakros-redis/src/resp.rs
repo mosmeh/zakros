@@ -96,6 +96,12 @@ pub struct RespCodec {
     array: Vec<Bytes>,
 }
 
+impl RespCodec {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
 impl Decoder for RespCodec {
     type Item = Vec<Bytes>;
     type Error = RespError;
