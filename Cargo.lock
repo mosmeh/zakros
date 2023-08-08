@@ -1256,6 +1256,7 @@ dependencies = [
  "clap",
  "futures",
  "parking_lot",
+ "rand",
  "serde",
  "tarpc",
  "thiserror",

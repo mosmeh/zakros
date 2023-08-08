@@ -4,6 +4,7 @@ mod rpc;
 mod store;
 
 use clap::{Parser, ValueEnum};
+use rand::seq::SliceRandom;
 use rpc::{RpcClient, RpcServer, RpcService};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::SystemTime};
 use store::{Store, StoreCommand};
@@ -107,12 +108,15 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
     }
 }
 
+const RUN_ID_LEN: usize = 40;
+
 pub struct Shared {
     opts: Opts,
     raft: Raft<StoreCommand>,
     store: Store,
     rpc_client: Arc<RpcClient>,
     publisher: Publisher,
+    run_id: [u8; RUN_ID_LEN],
     started_at: SystemTime,
     conn_limit: Arc<Semaphore>,
 }
@@ -120,6 +124,16 @@ pub struct Shared {
 impl Shared {
     async fn new(node_id: NodeId, opts: Opts) -> anyhow::Result<Self> {
         let started_at = SystemTime::now();
+
+        let mut run_id = [0; RUN_ID_LEN];
+        {
+            const CHARSET: &[u8] = b"0123456789abcdef";
+            let mut rng = rand::thread_rng();
+            for x in run_id.iter_mut() {
+                *x = *CHARSET.choose(&mut rng).unwrap();
+            }
+        }
+
         let nodes = (0..opts.cluster_addrs.len() as u64)
             .map(NodeId::from)
             .collect();
@@ -142,14 +156,17 @@ impl Shared {
                 }
             }
         };
+
         let publisher = Publisher::new(32768);
         let conn_limit = Arc::new(Semaphore::new(opts.max_num_clients));
+
         Ok(Self {
             opts,
             raft,
             store,
             rpc_client,
             publisher,
+            run_id,
             started_at,
             conn_limit,
         })
