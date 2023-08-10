@@ -1,16 +1,17 @@
+use super::CommandError;
 use crate::connection::RedisConnection;
 use bytes::Bytes;
 use std::net::SocketAddr;
-use zakros_raft::{NodeId, RaftError, RaftResult};
-use zakros_redis::{resp::Value, RedisResult, ResponseError};
+use zakros_raft::{NodeId, RaftError};
+use zakros_redis::{resp::Value, RedisError, RedisResult, ResponseError};
 
-pub async fn cluster(conn: &mut RedisConnection, args: &[Bytes]) -> RaftResult<RedisResult> {
+pub async fn cluster(conn: &mut RedisConnection, args: &[Bytes]) -> Result<Value, CommandError> {
     let [subcommand, _args @ ..] = args else {
-        return Ok(Err(ResponseError::WrongArity.into()));
+        return Err(RedisError::from(ResponseError::WrongArity).into());
     };
     let shared = &conn.shared;
-    let result = match subcommand.to_ascii_uppercase().as_slice() {
-        b"MYID" => format_node_id(NodeId::from(shared.opts.id)),
+    match subcommand.to_ascii_uppercase().as_slice() {
+        b"MYID" => Ok(format_node_id(NodeId::from(shared.opts.id))),
         b"SLOTS" => {
             const CLUSTER_SLOTS: i64 = 16384;
             let leader_id = shared
@@ -23,32 +24,28 @@ pub async fn cluster(conn: &mut RedisConnection, args: &[Bytes]) -> RaftResult<R
             let addrs = &shared.opts.cluster_addrs;
             let mut responses = vec![Ok(0.into()), Ok((CLUSTER_SLOTS - 1).into())];
             responses.reserve(addrs.len());
-            responses.push(format_node(leader_id, addrs[leader_index]));
+            responses.push(Ok(format_node(leader_id, addrs[leader_index])));
             for (i, addr) in addrs.iter().enumerate() {
                 if i != leader_index {
-                    responses.push(format_node(NodeId::from(i as u64), *addr));
+                    responses.push(Ok(format_node(NodeId::from(i as u64), *addr)));
                 }
             }
             Ok(Value::Array(vec![Ok(Value::Array(responses))]))
         }
-        _ => Err(ResponseError::UnknownSubcommand(
-            String::from_utf8_lossy(subcommand).into_owned(),
-        )
-        .into()),
-    };
-    Ok(result)
+        _ => Err(RedisError::from(ResponseError::UnknownSubcommand).into()),
+    }
 }
 
-fn format_node_id(node_id: NodeId) -> RedisResult {
-    Ok(Bytes::from(format!("{:0>40x}", Into::<u64>::into(node_id)).into_bytes()).into())
+fn format_node_id(node_id: NodeId) -> Value {
+    Bytes::from(format!("{:0>40x}", Into::<u64>::into(node_id)).into_bytes()).into()
 }
 
-fn format_node(node_id: NodeId, addr: SocketAddr) -> RedisResult {
-    Ok(Value::Array(vec![
+fn format_node(node_id: NodeId, addr: SocketAddr) -> Value {
+    Value::Array(vec![
         Ok(Bytes::from(addr.ip().to_string().into_bytes()).into()),
         Ok((addr.port() as i64).into()),
-        format_node_id(node_id),
-    ]))
+        Ok(format_node_id(node_id)),
+    ])
 }
 
 pub fn readonly(conn: &mut RedisConnection, args: &[Bytes]) -> RedisResult {

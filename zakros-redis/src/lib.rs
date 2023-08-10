@@ -38,8 +38,8 @@ pub enum ResponseError {
     #[error("unknown command '{0:.128}'")]
     UnknownCommand(String),
 
-    #[error("unknown subcommand '{0:.128}'")]
-    UnknownSubcommand(String),
+    #[error("unknown subcommand")]
+    UnknownSubcommand,
 
     #[error("syntax error")]
     SyntaxError,

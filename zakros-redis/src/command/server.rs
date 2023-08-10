@@ -59,11 +59,6 @@ impl WriteCommandHandler for command::FlushDb {
     }
 }
 
-impl CommandSpec for command::Info {
-    const NAME: &'static str = "INFO";
-    const ARITY: Arity = Arity::AtLeast(0);
-}
-
 impl CommandSpec for command::Ping {
     const NAME: &'static str = "PING";
     const ARITY: Arity = Arity::AtLeast(0);

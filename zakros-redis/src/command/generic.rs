@@ -113,16 +113,6 @@ impl WriteCommandHandler for command::RenameNx {
     }
 }
 
-impl CommandSpec for command::Select {
-    const NAME: &'static str = "SELECT";
-    const ARITY: Arity = Arity::Fixed(1);
-}
-
-impl CommandSpec for command::Shutdown {
-    const NAME: &'static str = "SHUTDOWN";
-    const ARITY: Arity = Arity::AtLeast(0);
-}
-
 impl CommandSpec for command::Type {
     const NAME: &'static str = "TYPE";
     const ARITY: Arity = Arity::Fixed(1);

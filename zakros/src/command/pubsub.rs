@@ -31,7 +31,7 @@ pub async fn psubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<()
     Ok(())
 }
 
-pub async fn publish(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), CommandError> {
+pub async fn publish(conn: &mut RedisConnection, args: &[Bytes]) -> Result<Value, CommandError> {
     let [channel, message] = args else {
         return Err(RedisError::from(ResponseError::WrongArity).into());
     };
@@ -51,8 +51,7 @@ pub async fn publish(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(), C
             tokio::spawn(async move { rpc_handler.publish(NodeId::from(i), message).await });
         }
     }
-    conn.framed.send(Ok((num_receivers as i64).into())).await?;
-    Ok(())
+    Ok((num_receivers as i64).into())
 }
 
 pub fn pubsub(conn: &RedisConnection, args: &[Bytes]) -> RedisResult {
@@ -89,10 +88,7 @@ pub fn pubsub(conn: &RedisConnection, args: &[Bytes]) -> RedisResult {
             }
             Ok(responses.into())
         }
-        _ => Err(ResponseError::UnknownSubcommand(
-            String::from_utf8_lossy(subcommand).into_owned(),
-        )
-        .into()),
+        _ => Err(ResponseError::UnknownSubcommand.into()),
     }
 }
 

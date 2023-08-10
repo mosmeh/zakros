@@ -53,10 +53,10 @@ pub async fn call(
             use pubsub::*;
             use server::*;
             match command {
-                SystemCommand::Cluster => cluster(conn, args).await?,
+                SystemCommand::Cluster => Ok(cluster(conn, args).await?),
                 SystemCommand::Info => info(conn, args),
                 SystemCommand::PSubscribe => return psubscribe(conn, args).await,
-                SystemCommand::Publish => return publish(conn, args).await,
+                SystemCommand::Publish => Ok(publish(conn, args).await?),
                 SystemCommand::PubSub => pubsub(conn, args),
                 SystemCommand::PUnsubscribe => return punsubscribe(conn, args).await,
                 SystemCommand::ReadOnly => readonly(conn, args),
