@@ -6,6 +6,11 @@ impl CommandSpec for command::Cluster {
     const ARITY: Arity = Arity::AtLeast(1);
 }
 
+impl CommandSpec for command::Debug {
+    const NAME: &'static str = "DEBUG";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
 impl CommandSpec for command::Info {
     const NAME: &'static str = "INFO";
     const ARITY: Arity = Arity::AtLeast(0);

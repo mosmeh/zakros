@@ -258,6 +258,7 @@ stateless_commands! {
 
 system_commands! {
     Cluster,
+    Debug,
     Info,
     PSubscribe,
     Publish,

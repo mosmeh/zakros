@@ -1,4 +1,5 @@
 mod cluster;
+mod debug;
 mod generic;
 mod pubsub;
 mod server;
@@ -49,11 +50,13 @@ pub async fn call(
         RedisCommand::Stateless(command) => command.call(args),
         RedisCommand::System(command) => {
             use cluster::*;
+            use debug::*;
             use generic::*;
             use pubsub::*;
             use server::*;
             match command {
                 SystemCommand::Cluster => Ok(cluster(conn, args).await?),
+                SystemCommand::Debug => debug(conn, args),
                 SystemCommand::Info => info(conn, args),
                 SystemCommand::PSubscribe => return psubscribe(conn, args).await,
                 SystemCommand::Publish => Ok(publish(conn, args).await?),
