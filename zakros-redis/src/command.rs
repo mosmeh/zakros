@@ -1,6 +1,7 @@
 mod bitops;
 mod generic;
 mod hash;
+mod hyperloglog;
 mod list;
 mod server;
 mod set;
@@ -200,6 +201,9 @@ write_commands! {
     LTrim,
     MSet,
     MSetNx,
+    PfAdd,
+    PfCount,
+    PfMerge,
     Rename,
     RenameNx,
     RPop,

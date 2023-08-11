@@ -4,6 +4,8 @@ pub mod pubsub;
 pub mod resp;
 pub mod string;
 
+mod hyperloglog;
+
 use bstr::ByteSlice;
 use bytes::Bytes;
 use resp::{ProtocolError, Value};
