@@ -133,3 +133,28 @@ impl ReadCommandHandler for command::Type {
         Ok(ty.into())
     }
 }
+
+impl CommandSpec for command::Unlink {
+    const NAME: &'static str = "UNLINK";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
+impl WriteCommandHandler for command::Unlink {
+    fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
+        if args.is_empty() {
+            return Err(ResponseError::WrongArity.into());
+        }
+        let mut unlinked = Vec::with_capacity(args.len());
+        {
+            let mut dict = dict.write();
+            for key in args {
+                if let Some(kv) = dict.remove_entry(key) {
+                    unlinked.push(kv);
+                }
+            }
+        }
+        let num_unlinked = unlinked.len();
+        tokio::task::spawn_blocking(|| drop(unlinked));
+        Ok((num_unlinked as i64).into())
+    }
+}

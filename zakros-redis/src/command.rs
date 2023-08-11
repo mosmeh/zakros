@@ -216,6 +216,7 @@ write_commands! {
     SMove,
     SRem,
     SUnionStore,
+    Unlink,
 }
 
 read_commands! {
