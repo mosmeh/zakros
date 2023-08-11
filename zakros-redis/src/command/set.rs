@@ -16,8 +16,7 @@ impl CommandSpec for command::SAdd {
 impl WriteCommandHandler for command::SAdd {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, members) = match args {
-            [_key] => return Err(ResponseError::WrongArity.into()),
-            [key, members @ ..] => (key, members),
+            [key, members @ ..] if !members.is_empty() => (key, members),
             _ => return Err(ResponseError::WrongArity.into()),
         };
         match dict.write().entry(key.clone()) {
@@ -150,8 +149,7 @@ impl CommandSpec for command::SMIsMember {
 impl ReadCommandHandler for command::SMIsMember {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, members) = match args {
-            [_key] => return Err(ResponseError::WrongArity.into()),
-            [key, members @ ..] => (key, members),
+            [key, members @ ..] if !members.is_empty() => (key, members),
             _ => return Err(ResponseError::WrongArity.into()),
         };
         let responses = match dict.read().get(key) {
@@ -218,8 +216,7 @@ impl CommandSpec for command::SRem {
 impl WriteCommandHandler for command::SRem {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, members) = match args {
-            [_key] => return Err(ResponseError::WrongArity.into()),
-            [key, members @ ..] => (key, members),
+            [key, members @ ..] if !members.is_empty() => (key, members),
             _ => return Err(ResponseError::WrongArity.into()),
         };
         let mut dict = dict.write();

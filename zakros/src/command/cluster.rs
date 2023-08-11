@@ -11,6 +11,21 @@ pub async fn cluster(conn: &mut RedisConnection, args: &[Bytes]) -> Result<Value
     };
     let shared = &conn.shared;
     match subcommand.to_ascii_uppercase().as_slice() {
+        b"HELP" => Ok(Value::Array(
+            [
+                "CLUSTER <subcommand> [<arg> [value] [opt] ...]. Subcommands are:",
+                "MYID",
+                "    Return the node id.",
+                "SLOTS",
+                "    Return information about slots range mappings. Each range is made of:",
+                "    start, end, master and replicas IP addresses, ports and ids",
+                "HELP",
+                "    Print this help.",
+            ]
+            .iter()
+            .map(|s| Ok((*s).into()))
+            .collect(),
+        )),
         b"MYID" => Ok(format_node_id(NodeId::from(shared.opts.id))),
         b"SLOTS" => {
             const CLUSTER_SLOTS: i64 = 16384;

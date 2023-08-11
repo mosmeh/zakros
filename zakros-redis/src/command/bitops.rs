@@ -92,8 +92,7 @@ impl CommandSpec for command::BitOp {
 impl WriteCommandHandler for command::BitOp {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (op, dest_key, keys) = match args {
-            [_op, _dest_key] => return Err(ResponseError::WrongArity.into()),
-            [op, dest_key, keys @ ..] => (op, dest_key, keys),
+            [op, dest_key, keys @ ..] if !keys.is_empty() => (op, dest_key, keys),
             _ => return Err(ResponseError::WrongArity.into()),
         };
         let op = match op.to_ascii_uppercase().as_slice() {

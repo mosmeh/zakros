@@ -16,8 +16,7 @@ impl CommandSpec for command::HDel {
 impl WriteCommandHandler for command::HDel {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, fields) = match args {
-            [_key] => return Err(ResponseError::WrongArity.into()),
-            [key, fields @ ..] => (key, fields),
+            [key, fields @ ..] if !fields.is_empty() => (key, fields),
             _ => return Err(ResponseError::WrongArity.into()),
         };
         let mut dict = dict.write();
@@ -180,8 +179,7 @@ impl CommandSpec for command::HMGet {
 impl ReadCommandHandler for command::HMGet {
     fn call<'a, D: ReadLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, fields) = match args {
-            [_key] => return Err(ResponseError::WrongArity.into()),
-            [key, fields @ ..] => (key, fields),
+            [key, fields @ ..] if !fields.is_empty() => (key, fields),
             _ => return Err(ResponseError::WrongArity.into()),
         };
         match dict.read().get(key) {
@@ -244,8 +242,7 @@ impl CommandSpec for command::HSet {
 impl WriteCommandHandler for command::HSet {
     fn call<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, args: &[Bytes]) -> RedisResult {
         let (key, pairs) = match args {
-            [_key] => return Err(ResponseError::WrongArity.into()),
-            [key, pairs @ ..] if pairs.len() % 2 == 0 => (key, pairs),
+            [key, pairs @ ..] if !pairs.is_empty() && pairs.len() % 2 == 0 => (key, pairs),
             _ => return Err(ResponseError::WrongArity.into()),
         };
         match dict.write().entry(key.clone()) {

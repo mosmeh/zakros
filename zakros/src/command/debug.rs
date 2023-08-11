@@ -9,6 +9,23 @@ pub fn debug(conn: &RedisConnection, args: &[Bytes]) -> RedisResult {
         return Err(ResponseError::WrongArity.into());
     };
     match subcommand.to_ascii_uppercase().as_slice() {
+        b"HELP" => Ok(Value::Array(
+            [
+                "DEBUG <subcommand> [<arg> [value] [opt] ...]. Subcommands are:",
+                "LOG <message>",
+                "    Write <message> to the server log.",
+                "POPULATE <count> [<prefix>] [<size>]",
+                "    Create <count> string keys named key:<num>. If <prefix> is specified then",
+                "    it is used instead of the 'key' prefix. These are not propagated to",
+                "    replicas. Cluster slots are not respected so keys not belonging to the",
+                "    current node can be created in cluster mode.",
+                "HELP",
+                "    Print this help.",
+            ]
+            .iter()
+            .map(|s| Ok((*s).into()))
+            .collect(),
+        )),
         b"LOG" => match args {
             [message] => {
                 tracing::warn!("DEBUG LOG: {}", message.as_bstr());

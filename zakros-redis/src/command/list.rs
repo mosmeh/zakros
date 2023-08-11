@@ -276,8 +276,7 @@ where
     F: Fn(&mut VecDeque<Bytes>, Bytes),
 {
     let (key, elements) = match args {
-        [_key] => return Err(ResponseError::WrongArity.into()),
-        [key, elements @ ..] => (key, elements),
+        [key, elements @ ..] if !elements.is_empty() => (key, elements),
         _ => return Err(ResponseError::WrongArity.into()),
     };
     match dict.write().entry(key.clone()) {

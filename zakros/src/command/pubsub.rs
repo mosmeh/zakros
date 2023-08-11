@@ -60,6 +60,23 @@ pub fn pubsub(conn: &RedisConnection, args: &[Bytes]) -> RedisResult {
     };
     let shared = &conn.shared;
     match subcommand.to_ascii_uppercase().as_slice() {
+        b"HELP" => Ok(Value::Array(
+            [
+                "PUBSUB <subcommand> [<arg> [value] [opt] ...]. Subcommands are:",
+                "CHANNELS [<pattern>]",
+                "    Return the currently active channels matching a <pattern> (default: '*').",
+                "NUMPAT",
+                "    Return number of subscriptions to patterns.",
+                "NUMSUB [<channel> ...]",
+                "    Return the number of subscribers for the specified channels, excluding",
+                "    pattern subscriptions(default: no channels).",
+                "HELP",
+                "    Print this help.",
+            ]
+            .iter()
+            .map(|s| Ok((*s).into()))
+            .collect(),
+        )),
         b"CHANNELS" => {
             let channels = match args {
                 [] => shared.publisher.active_channels(),
