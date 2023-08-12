@@ -193,6 +193,9 @@ impl WriteCommandHandler for command::SMove {
         if !source_set.remove(member) {
             return Ok(0.into());
         }
+        if source_set.is_empty() {
+            source_entry.remove();
+        }
         match dict.entry(destination.clone()) {
             Entry::Occupied(mut dest_entry) => {
                 let Object::Set(dest_set) = dest_entry.get_mut() else {
@@ -229,10 +232,12 @@ impl WriteCommandHandler for command::SRem {
         };
         let mut num_removed = 0;
         for member in members {
-            if set.remove(member) {
-                num_removed += 1;
+            if !set.remove(member) {
+                continue;
             }
+            num_removed += 1;
             if set.is_empty() {
+                entry.remove();
                 break;
             }
         }

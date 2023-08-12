@@ -29,9 +29,10 @@ impl WriteCommandHandler for command::HDel {
         };
         let mut num_removed = 0;
         for field in fields {
-            if hash.remove(field).is_some() {
-                num_removed += 1;
+            if hash.remove(field).is_none() {
+                continue;
             }
+            num_removed += 1;
             if hash.is_empty() {
                 entry.remove();
                 break;
