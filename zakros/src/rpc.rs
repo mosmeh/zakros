@@ -5,7 +5,6 @@ use tarpc::{context::Context, tokio_serde::formats::Bincode};
 use tokio::{io::AsyncWriteExt, net::TcpStream, time::timeout};
 use tokio_util::codec::LengthDelimitedCodec;
 use zakros_raft::{
-    self,
     transport::{
         AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport,
     },
@@ -82,6 +81,7 @@ pub trait RpcService {
     async fn append_entries(
         request: AppendEntries<StoreCommand>,
     ) -> RaftResult<AppendEntriesResponse>;
+
     async fn request_vote(request: RequestVote) -> RaftResult<RequestVoteResponse>;
 }
 

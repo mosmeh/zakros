@@ -58,7 +58,7 @@ impl<H: SessionHandler> RedisSession<H> {
                     .into()));
                 }
                 if let Transaction::Queued(queue) = &mut self.txn {
-                    queue.push((command, args.to_owned()));
+                    queue.push((command, args.to_vec()));
                 }
                 Ok(Ok("QUEUED".into()))
             }

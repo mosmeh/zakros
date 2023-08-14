@@ -1,10 +1,10 @@
-use crate::{Entry, NodeId};
+use crate::{Command, Entry, NodeId};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 #[async_trait]
 pub trait Transport: Send + Sync + 'static {
-    type Command: Send;
+    type Command: Command;
     type Error: Send + std::fmt::Debug;
 
     async fn send_append_entries(
@@ -12,6 +12,7 @@ pub trait Transport: Send + Sync + 'static {
         dest: NodeId,
         request: AppendEntries<Self::Command>,
     ) -> Result<AppendEntriesResponse, Self::Error>;
+
     async fn send_request_vote(
         &self,
         dest: NodeId,

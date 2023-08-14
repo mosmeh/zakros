@@ -5,11 +5,12 @@ pub use persistent::{PersistentStorage, PersistentStorageError};
 pub use volatile::VolatileStorage;
 
 use super::{Entry, Metadata};
+use crate::Command;
 use async_trait::async_trait;
 
 #[async_trait]
 pub trait Storage: Send + Sync + 'static {
-    type Command: Send + Sync;
+    type Command: Command;
     type Error: Send + std::fmt::Debug;
 
     async fn load(&mut self) -> Result<Metadata, Self::Error>;

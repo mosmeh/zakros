@@ -71,7 +71,7 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
     let listener = TcpListener::bind(opts.bind_addr).await?;
     tracing::info!("bound to {}", listener.local_addr()?);
     let id = NodeId::from(opts.id);
-    let shared = Arc::new(SharedState::new(id, opts).await);
+    let shared = Arc::new(SharedState::new(id, opts).await?);
     loop {
         let (mut conn, addr) = listener.accept().await?;
         tracing::trace!("accepting connection: {}", addr);
@@ -104,15 +104,14 @@ struct SharedState {
 }
 
 impl SharedState {
-    async fn new(node_id: NodeId, opts: Opts) -> Self {
+    async fn new(node_id: NodeId, opts: Opts) -> anyhow::Result<Self> {
         let started_at = SystemTime::now();
         let nodes = (0..opts.cluster_addrs.len() as u64)
             .map(NodeId::from)
             .collect();
         let store = Store::new();
-        let storage = PersistentStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string()))
-            .await
-            .unwrap();
+        let storage =
+            PersistentStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string())).await?;
         let rpc_handler = Arc::new(RpcHandler::new(opts.cluster_addrs.clone()));
         let raft = Raft::new(
             node_id,
@@ -123,12 +122,12 @@ impl SharedState {
             rpc_handler,
         );
         let conn_limit = Arc::new(Semaphore::new(opts.max_num_clients));
-        Self {
+        Ok(Self {
             raft,
             opts,
             store,
             started_at,
             conn_limit,
-        }
+        })
     }
 }

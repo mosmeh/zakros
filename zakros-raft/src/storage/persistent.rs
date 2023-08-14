@@ -1,15 +1,12 @@
 use super::Storage;
-use crate::{Entry, Metadata};
+use crate::{Command, Entry, Metadata};
 use async_trait::async_trait;
 use bincode::Options;
 use byteorder::{WriteBytesExt, LE};
 use bytes::{Buf, BufMut, BytesMut};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::{
-    marker::PhantomData,
-    path::{Path, PathBuf},
-};
+use std::{io::SeekFrom, marker::PhantomData, path::PathBuf};
 use tokio::{
     fs::{File, OpenOptions},
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
@@ -26,7 +23,8 @@ pub enum PersistentStorageError {
 }
 
 pub struct PersistentStorage<C> {
-    dir: PathBuf,
+    dir_path: PathBuf,
+    dir: Option<File>,
     writer: FramedWrite<File, EntryEncoder<Entry<C>>>,
     offsets: Vec<u64>,
     current_offset: u64,
@@ -35,13 +33,13 @@ pub struct PersistentStorage<C> {
 #[async_trait]
 impl<C> Storage for PersistentStorage<C>
 where
-    for<'de> C: Serialize + Deserialize<'de> + Clone + Send + Sync + 'static,
+    for<'de> C: Command + Serialize + Deserialize<'de>,
 {
     type Command = C;
     type Error = PersistentStorageError;
 
     async fn load(&mut self) -> Result<Metadata, Self::Error> {
-        match File::open(self.dir.join("metadata")).await {
+        match File::open(self.dir_path.join("metadata")).await {
             Ok(mut file) => {
                 let mut bytes = Vec::new();
                 file.read_to_end(&mut bytes).await?;
@@ -65,14 +63,10 @@ where
         let Some(&offset) = self.offsets.get(index) else {
             return Ok(None);
         };
-        self.file_mut()
-            .seek(std::io::SeekFrom::Start(offset))
-            .await?;
-        let mut reader = FramedRead::new(self.file_mut(), EntryDecoder::default());
-        Ok(match reader.next().await {
-            Some(entry) => Some(entry?),
-            None => None,
-        })
+        self.flush_writer().await?;
+        self.file().seek(SeekFrom::Start(offset)).await?;
+        let mut reader = FramedRead::new(self.file(), EntryDecoder::default());
+        reader.next().await.transpose().map_err(Into::into)
     }
 
     async fn entries(&mut self, start: u64) -> Result<Vec<Entry<Self::Command>>, Self::Error> {
@@ -81,10 +75,9 @@ where
         let Some(&offset) = self.offsets.get(index) else {
             return Ok(Vec::new());
         };
-        self.file_mut()
-            .seek(std::io::SeekFrom::Start(offset))
-            .await?;
-        let mut reader = FramedRead::new(self.file_mut(), EntryDecoder::default());
+        self.flush_writer().await?;
+        self.file().seek(SeekFrom::Start(offset)).await?;
+        let mut reader = FramedRead::new(self.file(), EntryDecoder::default());
         let mut entries = Vec::new();
         while let Some(entry) = reader.next().await {
             entries.push(entry?);
@@ -96,7 +89,7 @@ where
         &mut self,
         entries: &[Entry<Self::Command>],
     ) -> Result<(), Self::Error> {
-        self.file_mut().seek(std::io::SeekFrom::End(0)).await?;
+        self.file().seek(SeekFrom::End(0)).await?;
         for entry in entries {
             let size = bincode::DefaultOptions::new().serialized_size(entry)?;
             let offset = self.current_offset;
@@ -114,6 +107,7 @@ where
         let Some(&offset) = self.offsets.get(index) else {
             return Ok(());
         };
+        self.flush_writer().await?;
         self.file().set_len(offset).await?;
         self.offsets.truncate(index);
         self.persist_entries().await?;
@@ -122,44 +116,47 @@ where
 
     async fn persist_metadata(&mut self, metadata: &Metadata) -> Result<(), Self::Error> {
         let bytes = bincode::DefaultOptions::new().serialize(metadata)?;
-        let tmp_filename = self.dir.join("metadata.tmp");
+        let tmp_filename = self.dir_path.join("metadata.tmp");
         {
             let mut tmp_file = File::create(&tmp_filename).await?;
             tmp_file.write_all(&bytes).await?;
             tmp_file.sync_data().await?;
         }
-        tokio::fs::rename(tmp_filename, self.dir.join("metadata")).await?;
-        // TODO: fsync directory
+        tokio::fs::rename(tmp_filename, self.dir_path.join("metadata")).await?;
+        if let Some(dir) = &self.dir {
+            dir.sync_all().await?;
+        }
         Ok(())
     }
 
     async fn persist_entries(&mut self) -> Result<(), Self::Error> {
-        self.file_mut().seek(std::io::SeekFrom::End(0)).await?;
-        self.writer.flush().await?;
+        self.flush_writer().await?;
         self.file().sync_data().await?;
         Ok(())
     }
 }
 
 impl<C> PersistentStorage<C> {
-    pub async fn new(dir: impl AsRef<Path>) -> Result<Self, PersistentStorageError> {
-        let dir = dir.as_ref().to_owned();
-        tokio::fs::create_dir_all(&dir).await?;
+    pub async fn new(dir_path: impl Into<PathBuf>) -> Result<Self, PersistentStorageError> {
+        let dir_path = dir_path.into();
+        tokio::fs::create_dir_all(&dir_path).await?;
+        let dir = File::open(&dir_path).await.ok();
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
             .write(true)
-            .open(dir.join("log"))
+            .open(dir_path.join("log"))
             .await?;
         let mut reader = FramedRead::new(&mut file, SizeDecoder::default());
         let mut offsets = Vec::new();
         let mut current_offset = 0;
-        while let Some(offset) = reader.next().await {
+        while let Some(size) = reader.next().await {
             offsets.push(current_offset);
-            current_offset += offset? + HEADER_SIZE as u64;
+            current_offset += size? + HEADER_SIZE as u64;
         }
         let writer = FramedWrite::new(file, EntryEncoder::default());
         Ok(Self {
+            dir_path,
             dir,
             writer,
             offsets,
@@ -167,12 +164,18 @@ impl<C> PersistentStorage<C> {
         })
     }
 
-    fn file(&self) -> &File {
-        self.writer.get_ref()
-    }
-
-    fn file_mut(&mut self) -> &mut File {
+    fn file(&mut self) -> &mut File {
         self.writer.get_mut()
+    }
+}
+
+impl<C: Serialize> PersistentStorage<C> {
+    async fn flush_writer(&mut self) -> Result<(), PersistentStorageError> {
+        if !self.writer.write_buffer().is_empty() {
+            self.file().seek(SeekFrom::End(0)).await?;
+            self.writer.flush().await?;
+        }
+        Ok(())
     }
 }
 
