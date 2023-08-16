@@ -169,28 +169,27 @@ impl WriteCommandHandler for command::LTrim {
         };
         let mut start = start.to_i64()?;
         let mut stop = stop.to_i64()?;
-        match dict.write().entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::List(list) = entry.get_mut() else {
-                    return Err(RedisError::WrongType);
-                };
-                let len = list.len() as i64;
-                if start < 0 {
-                    start = (start + len).max(0);
-                }
-                if stop < 0 {
-                    stop += len;
-                }
-                if start > stop || start >= len {
-                    entry.remove();
-                } else {
-                    list.truncate(stop as usize + 1);
-                    list.drain(..start as usize);
-                }
-                Ok(Value::ok())
-            }
-            Entry::Vacant(_) => Ok(Value::ok()),
+        let mut dict = dict.write();
+        let Entry::Occupied(mut entry) = dict.entry(key.clone()) else {
+            return Ok(Value::ok());
+        };
+        let Object::List(list) = entry.get_mut() else {
+            return Err(RedisError::WrongType);
+        };
+        let len = list.len() as i64;
+        if start < 0 {
+            start = (start + len).max(0);
         }
+        if stop < 0 {
+            stop += len;
+        }
+        if start > stop || start >= len {
+            entry.remove();
+        } else {
+            list.truncate(stop as usize + 1);
+            list.drain(..start as usize);
+        }
+        Ok(Value::ok())
     }
 }
 
@@ -234,8 +233,8 @@ impl WriteCommandHandler for command::RPopLPush {
             source_entry.remove();
         }
         match dict.entry(destination.clone()) {
-            Entry::Occupied(mut dest_entry) => {
-                let Object::List(dest_list) = dest_entry.get_mut() else {
+            Entry::Occupied(dest_entry) => {
+                let Object::List(dest_list) = dest_entry.into_mut() else {
                     unreachable!()
                 };
                 dest_list.push_front(value.clone());
@@ -280,8 +279,8 @@ where
         _ => return Err(ResponseError::WrongArity.into()),
     };
     match dict.write().entry(key.clone()) {
-        Entry::Occupied(mut entry) => {
-            let Object::List(list) = entry.get_mut() else {
+        Entry::Occupied(entry) => {
+            let Object::List(list) = entry.into_mut() else {
                 return Err(RedisError::WrongType);
             };
             list.reserve(elements.len());

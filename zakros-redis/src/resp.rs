@@ -92,8 +92,8 @@ pub enum ProtocolError {
 
 #[derive(Default)]
 pub struct RespCodec {
-    array_len: Option<usize>,
-    array: Vec<Bytes>,
+    multibulk_array_len: Option<usize>,
+    multibulk_array: Vec<Bytes>,
 }
 
 impl RespCodec {
@@ -110,11 +110,14 @@ impl Decoder for RespCodec {
         if src.is_empty() {
             return Ok(None);
         }
-        if self.array_len.is_some() || src[0] == b'*' {
-            // we will resume or start decoding multibulk
+        if self.multibulk_array_len.is_some() || src[0] == b'*' {
+            // We will resume or start decoding multibulk.
+            // Single command in multibulk can be parsed across multiple calls
+            // to decode_multibulk().
             self.decode_multibulk(src)
         } else {
-            // inline protocol is always parsed in single call to decode()
+            // Single command (line) in inline protocol is always parsed in
+            // single call to decode_inline().
             decode_inline(src)
         }
         .map_err(Into::into)
@@ -130,7 +133,7 @@ impl RespCodec {
             s.to_str().map_err(|_| ())?.parse().map_err(|_| ())
         }
 
-        let array_len = match self.array_len {
+        let array_len = match self.multibulk_array_len {
             None => {
                 let header_end = match src.find_byte(b'\r') {
                     Some(end) if end + 1 < src.len() => end, // if there is a room for trailing \n
@@ -149,15 +152,15 @@ impl RespCodec {
                 }
 
                 let array_len = len as usize;
-                self.array_len = Some(array_len);
-                assert!(self.array.is_empty());
-                self.array.reserve(array_len);
+                self.multibulk_array_len = Some(array_len);
+                assert!(self.multibulk_array.is_empty());
+                self.multibulk_array.reserve(array_len);
                 array_len
             }
             Some(array_len) => array_len,
         };
 
-        for _ in self.array.len()..array_len {
+        for _ in self.multibulk_array.len()..array_len {
             let header_end = match src.find_byte(b'\r') {
                 Some(end) if end + 1 < src.len() => end,
                 _ => return Ok(None),
@@ -177,12 +180,12 @@ impl RespCodec {
                 return Ok(None);
             }
             src.advance(header_line_end);
-            self.array.push(src.split_to(len).freeze());
+            self.multibulk_array.push(src.split_to(len).freeze());
             src.advance(2);
         }
 
-        self.array_len = None;
-        Ok(Some(std::mem::take(&mut self.array)))
+        self.multibulk_array_len = None;
+        Ok(Some(std::mem::take(&mut self.multibulk_array)))
     }
 }
 

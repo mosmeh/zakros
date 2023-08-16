@@ -20,8 +20,8 @@ impl WriteCommandHandler for command::SAdd {
             _ => return Err(ResponseError::WrongArity.into()),
         };
         match dict.write().entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::Set(set) = entry.get_mut() else {
+            Entry::Occupied(entry) => {
+                let Object::Set(set) = entry.into_mut() else {
                     return Err(RedisError::WrongType);
                 };
                 let mut num_inserted = 0;
@@ -197,8 +197,8 @@ impl WriteCommandHandler for command::SMove {
             source_entry.remove();
         }
         match dict.entry(destination.clone()) {
-            Entry::Occupied(mut dest_entry) => {
-                let Object::Set(dest_set) = dest_entry.get_mut() else {
+            Entry::Occupied(dest_entry) => {
+                let Object::Set(dest_set) = dest_entry.into_mut() else {
                     unreachable!()
                 };
                 dest_set.insert(member.clone());

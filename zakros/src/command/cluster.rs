@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use zakros_raft::{NodeId, RaftError};
 use zakros_redis::{resp::Value, RedisError, RedisResult, ResponseError};
 
-pub async fn cluster(conn: &mut RedisConnection, args: &[Bytes]) -> Result<Value, CommandError> {
+pub async fn cluster(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, CommandError> {
     let [subcommand, _args @ ..] = args else {
         return Err(RedisError::from(ResponseError::WrongArity).into());
     };

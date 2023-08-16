@@ -20,8 +20,8 @@ impl WriteCommandHandler for command::PfAdd {
             return Err(ResponseError::WrongArity.into());
         };
         match dict.write().entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::String(s) = entry.get_mut() else {
+            Entry::Occupied(entry) => {
+                let Object::String(s) = entry.into_mut() else {
                     return Err(RedisError::WrongType);
                 };
                 let mut hll = DenseHyperLogLog::from_untrusted_bytes(s)?;
@@ -108,8 +108,8 @@ impl WriteCommandHandler for command::PfMerge {
             }
         }
         match dict.entry(dest_key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::String(s) = entry.get_mut() else {
+            Entry::Occupied(entry) => {
+                let Object::String(s) = entry.into_mut() else {
                     unreachable!()
                 };
                 DenseHyperLogLog::from_untrusted_bytes(s)

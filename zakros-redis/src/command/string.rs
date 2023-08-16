@@ -19,8 +19,8 @@ impl WriteCommandHandler for command::Append {
             return Err(ResponseError::WrongArity.into());
         };
         match dict.write().entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::String(s) = entry.get_mut() else {
+            Entry::Occupied(entry) => {
+                let Object::String(s) = entry.into_mut() else {
                     return Err(RedisError::WrongType);
                 };
                 s.extend_from_slice(value);
@@ -156,8 +156,8 @@ impl WriteCommandHandler for command::GetSet {
             return Err(ResponseError::WrongArity.into());
         };
         match dict.write().entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::String(s) = entry.get_mut() else {
+            Entry::Occupied(entry) => {
+                let Object::String(s) = entry.into_mut() else {
                     return Err(RedisError::WrongType);
                 };
                 let prev_value = std::mem::replace(s, value.to_vec());
@@ -354,8 +354,8 @@ impl WriteCommandHandler for command::SetRange {
             .try_into()
             .map_err(|_| RedisError::Response(ResponseError::ValueOutOfRange))?;
         match dict.write().entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::String(s) = entry.get_mut() else {
+            Entry::Occupied(entry) => {
+                let Object::String(s) = entry.into_mut() else {
                     return Err(RedisError::WrongType);
                 };
                 if value.is_empty() {
@@ -414,8 +414,8 @@ impl ReadCommandHandler for command::SubStr {
 
 fn incr<'a, D: RwLockable<'a, Dictionary>>(dict: &'a D, key: &Bytes, delta: i64) -> RedisResult {
     match dict.write().entry(key.clone()) {
-        Entry::Occupied(mut entry) => {
-            let Object::String(s) = entry.get_mut() else {
+        Entry::Occupied(entry) => {
+            let Object::String(s) = entry.into_mut() else {
                 return Err(RedisError::WrongType);
             };
             let new_value = s.to_i64()?.checked_add(delta).ok_or_else(|| {

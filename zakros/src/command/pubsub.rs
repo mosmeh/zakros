@@ -31,7 +31,7 @@ pub async fn psubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<()
     Ok(())
 }
 
-pub async fn publish(conn: &mut RedisConnection, args: &[Bytes]) -> Result<Value, CommandError> {
+pub async fn publish(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, CommandError> {
     let [channel, message] = args else {
         return Err(RedisError::from(ResponseError::WrongArity).into());
     };

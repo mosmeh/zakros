@@ -48,7 +48,7 @@ struct Opts {
     #[arg(long, default_value = "disk")]
     storage: RaftStorageKind,
 
-    #[arg(long, long, default_value = "data")]
+    #[arg(long, default_value = "data")]
     dir: PathBuf,
 }
 

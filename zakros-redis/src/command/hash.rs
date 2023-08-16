@@ -111,13 +111,13 @@ impl WriteCommandHandler for command::HIncrBy {
         };
         let increment = increment.to_i64()?;
         match dict.write().entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::Hash(hash) = entry.get_mut() else {
+            Entry::Occupied(key_entry) => {
+                let Object::Hash(hash) = key_entry.into_mut() else {
                     return Err(RedisError::WrongType);
                 };
                 match hash.entry(field.clone()) {
-                    Entry::Occupied(mut entry) => {
-                        let value = entry.get().to_i64().map_err(|_| {
+                    Entry::Occupied(mut field_entry) => {
+                        let value = field_entry.get().to_i64().map_err(|_| {
                             RedisError::from(ResponseError::Other("hash value is not an integer"))
                         })?;
                         let new_value = value.checked_add(increment).ok_or_else(|| {
@@ -125,17 +125,17 @@ impl WriteCommandHandler for command::HIncrBy {
                                 "increment or decrement would overflow",
                             ))
                         })?;
-                        entry.insert(new_value.to_string().into_bytes().into());
+                        field_entry.insert(new_value.to_string().into_bytes().into());
                         Ok(new_value.into())
                     }
-                    Entry::Vacant(entry) => {
-                        entry.insert(increment.to_string().into_bytes().into());
+                    Entry::Vacant(field_entry) => {
+                        field_entry.insert(increment.to_string().into_bytes().into());
                         Ok(increment.into())
                     }
                 }
             }
-            Entry::Vacant(entry) => {
-                entry.insert(
+            Entry::Vacant(key_entry) => {
+                key_entry.insert(
                     HashMap::from([(field.clone(), increment.to_string().into_bytes().into())])
                         .into(),
                 );
@@ -247,8 +247,8 @@ impl WriteCommandHandler for command::HSet {
             _ => return Err(ResponseError::WrongArity.into()),
         };
         match dict.write().entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::Hash(hash) = entry.get_mut() else {
+            Entry::Occupied(entry) => {
+                let Object::Hash(hash) = entry.into_mut() else {
                     return Err(RedisError::WrongType);
                 };
                 let mut num_added = 0;
@@ -284,8 +284,8 @@ impl WriteCommandHandler for command::HSetNx {
             return Err(ResponseError::WrongArity.into());
         };
         let was_set = match dict.write().entry(key.clone()) {
-            Entry::Occupied(mut entry) => {
-                let Object::Hash(hash) = entry.get_mut() else {
+            Entry::Occupied(entry) => {
+                let Object::Hash(hash) = entry.into_mut() else {
                     return Err(RedisError::WrongType);
                 };
                 match hash.entry(field.clone()) {
