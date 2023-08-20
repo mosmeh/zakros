@@ -5,7 +5,7 @@ pub mod storage;
 mod server;
 
 use async_trait::async_trait;
-use config::Config;
+use config::RaftConfig;
 use rpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport};
 use serde::{Deserialize, Serialize};
 use server::{Message, Server};
@@ -22,7 +22,7 @@ impl<C: Command> Raft<C> {
     pub fn new<M, S, T>(
         id: NodeId,
         nodes: Vec<NodeId>,
-        config: Config,
+        config: RaftConfig,
         state_machine: M,
         storage: S,
         transport: Arc<T>,

@@ -3,13 +3,13 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 #[derive(Clone)]
-pub struct Config {
+pub struct RaftConfig {
     pub(crate) heartbeat_interval: Duration,
     pub(crate) election_timeout_min: Duration,
     pub(crate) election_timeout_max: Duration,
 }
 
-impl Default for Config {
+impl Default for RaftConfig {
     fn default() -> Self {
         Self {
             heartbeat_interval: Duration::from_millis(200),
@@ -19,9 +19,9 @@ impl Default for Config {
     }
 }
 
-impl Config {
-    pub fn builder() -> ConfigBuilder {
-        ConfigBuilder::default()
+impl RaftConfig {
+    pub fn builder() -> RaftConfigBuilder {
+        RaftConfigBuilder::default()
     }
 
     pub(crate) fn random_election_deadline(&self) -> Instant {
@@ -31,9 +31,9 @@ impl Config {
 }
 
 #[derive(Default)]
-pub struct ConfigBuilder(Config);
+pub struct RaftConfigBuilder(RaftConfig);
 
-impl ConfigBuilder {
+impl RaftConfigBuilder {
     pub fn heartbeat_interval(&mut self, interval: Duration) -> &mut Self {
         self.0.heartbeat_interval = interval;
         self
@@ -45,16 +45,16 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn build(&self) -> Result<Config, ConfigError> {
+    pub fn build(&self) -> Result<RaftConfig, RaftConfigError> {
         if self.0.election_timeout_min >= self.0.election_timeout_max {
-            return Err(ConfigError::InvalidElectionTimeoutRange);
+            return Err(RaftConfigError::InvalidElectionTimeoutRange);
         }
         Ok(self.0.clone())
     }
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum ConfigError {
+pub enum RaftConfigError {
     #[error("election timeout range has to satisfy min < max")]
     InvalidElectionTimeoutRange,
 }

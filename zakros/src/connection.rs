@@ -76,8 +76,8 @@ impl RedisConnection {
                     RaftError::NotLeader {
                         leader_id: Some(leader_id),
                     } => {
-                        let addr =
-                            &self.shared.opts.cluster_addrs[Into::<u64>::into(leader_id) as usize];
+                        let addr = &self.shared.config.cluster_addrs
+                            [Into::<u64>::into(leader_id) as usize];
                         self.framed
                             .send(Err(RedisError::Moved {
                                 slot: 0,

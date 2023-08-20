@@ -38,7 +38,7 @@ fn generate_info_str(shared: &Shared, sections: u8) -> std::io::Result<Bytes> {
         is_first = false;
         out.write_all(b"# Server\r\n")?;
         write!(out, "run_id:{}\r\n", shared.run_id.as_bstr())?;
-        write!(out, "tcp_port:{}\r\n", shared.opts.bind_addr.port())?;
+        write!(out, "tcp_port:{}\r\n", shared.config.port)?;
         let now = SystemTime::now();
         let since_epoch = now
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -60,9 +60,9 @@ fn generate_info_str(shared: &Shared, sections: u8) -> std::io::Result<Bytes> {
         write!(
             out,
             "connected_clients:{}\r\n",
-            shared.opts.max_num_clients - shared.conn_limit.available_permits()
+            shared.config.max_clients - shared.conn_limit.available_permits()
         )?;
-        write!(out, "maxclients:{}\r\n", shared.opts.max_num_clients)?;
+        write!(out, "maxclients:{}\r\n", shared.config.max_clients)?;
     }
     if sections & CLUSTER != 0 {
         if !is_first {

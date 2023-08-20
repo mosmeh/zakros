@@ -26,7 +26,7 @@ pub async fn cluster(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, Co
             .map(|s| Ok((*s).into()))
             .collect(),
         )),
-        b"MYID" => Ok(format_node_id(NodeId::from(shared.opts.id))),
+        b"MYID" => Ok(format_node_id(NodeId::from(shared.config.id))),
         b"SLOTS" => {
             const CLUSTER_SLOTS: i64 = 16384;
             let leader_id = shared
@@ -36,7 +36,7 @@ pub async fn cluster(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, Co
                 .leader_id
                 .ok_or(RaftError::NotLeader { leader_id: None })?;
             let leader_index = Into::<u64>::into(leader_id) as usize;
-            let addrs = &shared.opts.cluster_addrs;
+            let addrs = &shared.config.cluster_addrs;
             let mut responses = vec![Ok(0.into()), Ok((CLUSTER_SLOTS - 1).into())];
             responses.reserve(addrs.len());
             responses.push(Ok(format_node(leader_id, addrs[leader_index])));

@@ -1,7 +1,7 @@
 use crate::{
     rpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport},
     storage::{Storage, StorageExt},
-    Command, Config, Entry, EntryKind, Metadata, Node, NodeId, RaftError, State, StateMachine,
+    Command, Entry, EntryKind, Metadata, Node, NodeId, RaftConfig, RaftError, State, StateMachine,
     Status,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
@@ -21,7 +21,7 @@ where
     T: Transport<Command = C>,
 {
     node_id: NodeId,
-    config: Config,
+    config: RaftConfig,
 
     state_machine: M,
     storage: S,
@@ -71,7 +71,7 @@ where
     pub async fn new(
         id: NodeId,
         nodes: Vec<NodeId>,
-        config: Config,
+        config: RaftConfig,
         state_machine: M,
         mut storage: S,
         transport: Arc<T>,

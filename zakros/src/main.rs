@@ -1,12 +1,13 @@
 mod command;
+mod config;
 mod connection;
 mod rpc;
 mod store;
 
-use clap::{Parser, ValueEnum};
+use config::{Config, RaftStorageKind};
 use rand::seq::SliceRandom;
 use rpc::{RpcClient, RpcServer, RpcService};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::SystemTime};
+use std::{sync::Arc, time::SystemTime};
 use store::{Store, StoreCommand};
 use tarpc::{
     server::{BaseChannel, Channel},
@@ -19,48 +20,17 @@ use tokio::{
 };
 use tokio_util::codec::LengthDelimitedCodec;
 use zakros_raft::{
-    config::Config,
+    config::RaftConfig,
     storage::{DiskStorage, MemoryStorage},
     NodeId, Raft,
 };
 use zakros_redis::pubsub::Publisher;
 
-#[derive(Debug, Clone, ValueEnum)]
-enum RaftStorageKind {
-    Disk,
-    Memory,
-}
-
-#[derive(Debug, Clone, Parser)]
-struct Opts {
-    #[arg(short = 'n', long, default_value_t = 0)]
-    id: u64,
-
-    #[arg(short = 'a', long, default_value = "0.0.0.0:6379")]
-    bind_addr: SocketAddr,
-
-    #[arg(short = 'c', long, value_delimiter = ',')]
-    cluster_addrs: Vec<SocketAddr>,
-
-    #[arg(long, default_value_t = 10000)]
-    max_num_clients: usize,
-
-    #[arg(long, default_value = "disk")]
-    storage: RaftStorageKind,
-
-    #[arg(long, default_value = "data")]
-    dir: PathBuf,
-}
-
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::try_init().map_err(anyhow::Error::msg)?;
 
-    let mut opts = Opts::parse();
-    if opts.cluster_addrs.is_empty() {
-        opts.cluster_addrs.push(opts.bind_addr);
-    }
-
-    tokio::runtime::Runtime::new()?.block_on(async { tokio::spawn(serve(opts)).await })??;
+    let config = Config::from_args()?;
+    tokio::runtime::Runtime::new()?.block_on(async { tokio::spawn(serve(config)).await })??;
     Ok(())
 }
 
@@ -80,11 +50,11 @@ async fn is_rpc(conn: &mut TcpStream) -> std::io::Result<bool> {
     }
 }
 
-async fn serve(opts: Opts) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(opts.bind_addr).await?;
+async fn serve(config: Config) -> anyhow::Result<()> {
+    let listener = TcpListener::bind((config.bind, config.port)).await?;
     tracing::info!("bound to {}", listener.local_addr()?);
-    let id = NodeId::from(opts.id);
-    let shared = Arc::new(Shared::new(id, opts).await?);
+    let id = NodeId::from(config.id);
+    let shared = Arc::new(Shared::new(id, config).await?);
     loop {
         let (mut conn, addr) = listener.accept().await?;
         tracing::trace!("accepting connection: {}", addr);
@@ -111,7 +81,7 @@ async fn serve(opts: Opts) -> anyhow::Result<()> {
 const RUN_ID_LEN: usize = 40;
 
 pub struct Shared {
-    opts: Opts,
+    config: Config,
     raft: Raft<StoreCommand>,
     store: Store,
     rpc_client: Arc<RpcClient>,
@@ -122,7 +92,7 @@ pub struct Shared {
 }
 
 impl Shared {
-    async fn new(node_id: NodeId, opts: Opts) -> anyhow::Result<Self> {
+    async fn new(node_id: NodeId, config: Config) -> anyhow::Result<Self> {
         let started_at = SystemTime::now();
 
         let mut run_id = [0; RUN_ID_LEN];
@@ -134,34 +104,34 @@ impl Shared {
             }
         }
 
-        let nodes = (0..opts.cluster_addrs.len() as u64)
+        let nodes = (0..config.cluster_addrs.len() as u64)
             .map(NodeId::from)
             .collect();
         let store = Store::new();
-        let rpc_client = Arc::new(RpcClient::new(opts.cluster_addrs.clone()));
+        let rpc_client = Arc::new(RpcClient::new(config.cluster_addrs.clone()));
         let raft = {
-            let config = Config::default();
+            let raft_config = RaftConfig::default();
             let store = store.clone();
             let rpc_handler = rpc_client.clone();
-            match opts.storage {
+            match config.storage {
                 RaftStorageKind::Disk => {
                     let storage =
-                        DiskStorage::new(opts.dir.join(Into::<u64>::into(node_id).to_string()))
+                        DiskStorage::new(config.dir.join(Into::<u64>::into(node_id).to_string()))
                             .await?;
-                    Raft::new(node_id, nodes, config, store, storage, rpc_handler)
+                    Raft::new(node_id, nodes, raft_config, store, storage, rpc_handler)
                 }
                 RaftStorageKind::Memory => {
                     let storage = MemoryStorage::new();
-                    Raft::new(node_id, nodes, config, store, storage, rpc_handler)
+                    Raft::new(node_id, nodes, raft_config, store, storage, rpc_handler)
                 }
             }
         };
 
         let publisher = Publisher::new(32768);
-        let conn_limit = Arc::new(Semaphore::new(opts.max_num_clients));
+        let conn_limit = Arc::new(Semaphore::new(config.max_clients));
 
         Ok(Self {
-            opts,
+            config,
             raft,
             store,
             rpc_client,

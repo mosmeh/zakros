@@ -1,4 +1,5 @@
 pub mod command;
+pub mod config;
 pub mod lockable;
 pub mod pubsub;
 pub mod resp;
