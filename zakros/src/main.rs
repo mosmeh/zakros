@@ -8,7 +8,7 @@ use config::{Config, RaftStorageKind};
 use rand::seq::SliceRandom;
 use rpc::{RpcClient, RpcServer, RpcService};
 use std::{sync::Arc, time::SystemTime};
-use store::{Store, StoreCommand};
+use store::{RaftCommand, Store};
 use tarpc::{
     server::{BaseChannel, Channel},
     tokio_serde::formats::Bincode,
@@ -53,8 +53,7 @@ async fn is_rpc(conn: &mut TcpStream) -> std::io::Result<bool> {
 async fn serve(config: Config) -> anyhow::Result<()> {
     let listener = TcpListener::bind((config.bind, config.port)).await?;
     tracing::info!("bound to {}", listener.local_addr()?);
-    let id = NodeId::from(config.id);
-    let shared = Arc::new(Shared::new(id, config).await?);
+    let shared = Arc::new(Shared::new(config).await?);
     loop {
         let (mut conn, addr) = listener.accept().await?;
         tracing::trace!("accepting connection: {}", addr);
@@ -82,8 +81,8 @@ const RUN_ID_LEN: usize = 40;
 
 pub struct Shared {
     config: Config,
-    raft: Raft<StoreCommand>,
     store: Store,
+    raft: Option<Raft<RaftCommand>>,
     rpc_client: Arc<RpcClient>,
     publisher: Publisher,
     run_id: [u8; RUN_ID_LEN],
@@ -92,7 +91,7 @@ pub struct Shared {
 }
 
 impl Shared {
-    async fn new(node_id: NodeId, config: Config) -> anyhow::Result<Self> {
+    async fn new(config: Config) -> anyhow::Result<Self> {
         let started_at = SystemTime::now();
 
         let mut run_id = [0; RUN_ID_LEN];
@@ -104,27 +103,32 @@ impl Shared {
             }
         }
 
-        let nodes = (0..config.cluster_addrs.len() as u64)
-            .map(NodeId::from)
-            .collect();
         let store = Store::new();
         let rpc_client = Arc::new(RpcClient::new(config.cluster_addrs.clone()));
-        let raft = {
+
+        let raft = if config.raft_enabled {
+            let node_id = NodeId::from(config.raft_node_id);
+            let nodes = (0..config.cluster_addrs.len() as u64)
+                .map(NodeId::from)
+                .collect();
             let raft_config = RaftConfig::default();
             let store = store.clone();
-            let rpc_handler = rpc_client.clone();
-            match config.storage {
+            let rpc_client = rpc_client.clone();
+            let raft = match config.raft_storage {
                 RaftStorageKind::Disk => {
                     let storage =
                         DiskStorage::new(config.dir.join(Into::<u64>::into(node_id).to_string()))
                             .await?;
-                    Raft::new(node_id, nodes, raft_config, store, storage, rpc_handler)
+                    Raft::new(node_id, nodes, raft_config, store, storage, rpc_client)
                 }
                 RaftStorageKind::Memory => {
                     let storage = MemoryStorage::new();
-                    Raft::new(node_id, nodes, raft_config, store, storage, rpc_handler)
+                    Raft::new(node_id, nodes, raft_config, store, storage, rpc_client)
                 }
-            }
+            };
+            Some(raft)
+        } else {
+            None
         };
 
         let publisher = Publisher::new(32768);
@@ -132,8 +136,8 @@ impl Shared {
 
         Ok(Self {
             config,
-            raft,
             store,
+            raft,
             rpc_client,
             publisher,
             run_id,

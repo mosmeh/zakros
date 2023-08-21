@@ -20,14 +20,17 @@ pub struct Config {
     #[serde(default = "defaults::dir")]
     pub dir: PathBuf,
 
-    #[serde(default = "defaults::id")]
-    pub id: u64,
-
     #[serde(default = "defaults::cluster_addrs")]
     pub cluster_addrs: Vec<SocketAddr>,
 
-    #[serde(default = "defaults::storage")]
-    pub storage: RaftStorageKind,
+    #[serde(default = "defaults::raft_enabled")]
+    pub raft_enabled: bool,
+
+    #[serde(default = "defaults::raft_node_id")]
+    pub raft_node_id: u64,
+
+    #[serde(default = "defaults::raft_storage")]
+    pub raft_storage: RaftStorageKind,
 }
 
 #[derive(Debug, PartialEq, Eq, Deserialize)]
@@ -60,15 +63,19 @@ mod defaults {
         "./data".into()
     }
 
-    pub const fn id() -> u64 {
-        0
-    }
-
     pub const fn cluster_addrs() -> Vec<SocketAddr> {
         Vec::new()
     }
 
-    pub const fn storage() -> RaftStorageKind {
+    pub const fn raft_enabled() -> bool {
+        true
+    }
+
+    pub const fn raft_node_id() -> u64 {
+        0
+    }
+
+    pub const fn raft_storage() -> RaftStorageKind {
         RaftStorageKind::Disk
     }
 }
@@ -103,5 +110,15 @@ impl Config {
             config.cluster_addrs.push((config.bind, config.port).into());
         }
         Ok(config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn empty_config_is_valid() {
+        let _: Config = zakros_redis::config::from_bytes(&[]).unwrap();
     }
 }

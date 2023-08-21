@@ -69,7 +69,7 @@ fn generate_info_str(shared: &Shared, sections: u8) -> std::io::Result<Bytes> {
             out.write_all(b"\r\n")?;
         }
         out.write_all(b"# Cluster\r\n")?;
-        write!(out, "cluster_enabled:1\r\n")?;
+        write!(out, "cluster_enabled:{}\r\n", shared.raft.is_some() as u8)?;
     }
     Ok(out.into())
 }

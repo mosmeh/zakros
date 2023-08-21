@@ -4,7 +4,7 @@ mod generic;
 mod pubsub;
 mod server;
 
-use crate::{connection::RedisConnection, store::StoreCommand};
+use crate::{connection::RedisConnection, store::RaftCommand};
 use bytes::Bytes;
 use futures::SinkExt;
 use zakros_raft::RaftError;
@@ -35,15 +35,17 @@ pub async fn call(
     args: &[Bytes],
 ) -> Result<(), CommandError> {
     let result = match command {
-        RedisCommand::Write(command) => {
-            conn.shared
-                .raft
-                .write(StoreCommand::SingleWrite((command, args.to_vec())))
-                .await?
-        }
+        RedisCommand::Write(command) => match &conn.shared.raft {
+            Some(raft) => {
+                raft.write(RaftCommand::SingleWrite((command, args.to_vec())))
+                    .await?
+            }
+            None => command.call(&conn.shared.store, args),
+        },
         RedisCommand::Read(command) => {
-            if !conn.is_readonly {
-                conn.shared.raft.read().await?;
+            match &conn.shared.raft {
+                Some(raft) if !conn.is_readonly => raft.read().await?,
+                _ => (),
             }
             command.call(&conn.shared.store, args)
         }
@@ -80,7 +82,10 @@ pub async fn exec(
     conn: &mut RedisConnection,
     commands: Vec<(RedisCommand, Vec<Bytes>)>,
 ) -> Result<(), CommandError> {
-    let result = conn.shared.raft.write(StoreCommand::Exec(commands)).await?;
+    let result = match &conn.shared.raft {
+        Some(raft) => raft.write(RaftCommand::Exec(commands)).await?,
+        None => conn.shared.store.exec(commands),
+    };
     conn.framed.send(result).await?;
     Ok(())
 }

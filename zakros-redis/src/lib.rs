@@ -62,6 +62,9 @@ pub enum ResponseError {
     #[error("no such key")]
     NoKey,
 
+    #[error("This instance has cluster support disabled")]
+    ClusterDisabled,
+
     #[error("{0}")]
     Other(&'static str),
 }

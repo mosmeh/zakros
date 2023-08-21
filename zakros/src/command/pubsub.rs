@@ -36,8 +36,10 @@ pub async fn publish(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, Co
         return Err(RedisError::from(ResponseError::WrongArity).into());
     };
 
-    // Make sure we can reach majority of nodes
-    conn.shared.raft.read().await?;
+    if let Some(raft) = &conn.shared.raft {
+        // Make sure we can reach majority of nodes
+        raft.read().await?;
+    }
 
     let message = PubSubMessage {
         channel: channel.clone(),
@@ -45,7 +47,7 @@ pub async fn publish(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, Co
     };
     let num_receivers = conn.shared.publisher.publish(message.clone());
     for i in 0..conn.shared.config.cluster_addrs.len() as u64 {
-        if i != conn.shared.config.id {
+        if i != conn.shared.config.raft_node_id {
             let rpc_handler = conn.shared.rpc_client.clone();
             let message = message.clone();
             tokio::spawn(async move { rpc_handler.publish(NodeId::from(i), message).await });

@@ -18,31 +18,33 @@ impl Store {
     pub fn new() -> Self {
         Default::default()
     }
+
+    pub fn exec(&self, commands: Vec<(RedisCommand, Vec<Bytes>)>) -> RedisResult {
+        let mut responses = Vec::with_capacity(commands.len());
+        let dict = RefCell::new(self.0.write());
+        for (command, args) in commands {
+            let response = match command {
+                RedisCommand::Write(command) => command.call(&dict, &args),
+                RedisCommand::Read(command) => command.call(&dict, &args),
+                RedisCommand::Stateless(command) => command.call(&args),
+                RedisCommand::System(_) | RedisCommand::Transaction(_) => {
+                    unreachable!()
+                }
+            };
+            responses.push(response);
+        }
+        Ok(Value::Array(responses))
+    }
 }
 
 #[async_trait]
 impl StateMachine for Store {
-    type Command = StoreCommand;
+    type Command = RaftCommand;
 
-    async fn apply(&mut self, command: StoreCommand) -> RedisResult {
+    async fn apply(&mut self, command: RaftCommand) -> RedisResult {
         match command {
-            StoreCommand::SingleWrite((command, args)) => command.call(self, &args),
-            StoreCommand::Exec(queries) => {
-                let mut responses = Vec::with_capacity(queries.len());
-                let dict = RefCell::new(self.0.write());
-                for (command, args) in queries {
-                    let response = match command {
-                        RedisCommand::Write(command) => command.call(&dict, &args),
-                        RedisCommand::Read(command) => command.call(&dict, &args),
-                        RedisCommand::Stateless(command) => command.call(&args),
-                        RedisCommand::System(_) | RedisCommand::Transaction(_) => {
-                            unreachable!()
-                        }
-                    };
-                    responses.push(response);
-                }
-                Ok(Value::Array(responses))
-            }
+            RaftCommand::SingleWrite((command, args)) => command.call(self, &args),
+            RaftCommand::Exec(commands) => self.exec(commands),
         }
     }
 }
@@ -61,11 +63,11 @@ impl<'a> RwLockable<'a, Dictionary> for Store {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum StoreCommand {
+pub enum RaftCommand {
     SingleWrite((WriteCommand, Vec<Bytes>)),
     Exec(Vec<(RedisCommand, Vec<Bytes>)>),
 }
 
-impl zakros_raft::Command for StoreCommand {
+impl zakros_raft::Command for RaftCommand {
     type Output = RedisResult;
 }

@@ -9,7 +9,9 @@ pub async fn cluster(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, Co
     let [subcommand, _args @ ..] = args else {
         return Err(RedisError::from(ResponseError::WrongArity).into());
     };
-    let shared = &conn.shared;
+    let Some(raft) = &conn.shared.raft else {
+        return Err(RedisError::from(ResponseError::ClusterDisabled).into());
+    };
     match subcommand.to_ascii_uppercase().as_slice() {
         b"HELP" => Ok(Value::Array(
             [
@@ -26,17 +28,18 @@ pub async fn cluster(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, Co
             .map(|s| Ok((*s).into()))
             .collect(),
         )),
-        b"MYID" => Ok(format_node_id(NodeId::from(shared.config.id))),
+        b"MYID" => Ok(format_node_id(NodeId::from(
+            conn.shared.config.raft_node_id,
+        ))),
         b"SLOTS" => {
             const CLUSTER_SLOTS: i64 = 16384;
-            let leader_id = shared
-                .raft
+            let leader_id = raft
                 .status()
                 .await?
                 .leader_id
                 .ok_or(RaftError::NotLeader { leader_id: None })?;
             let leader_index = Into::<u64>::into(leader_id) as usize;
-            let addrs = &shared.config.cluster_addrs;
+            let addrs = &conn.shared.config.cluster_addrs;
             let mut responses = vec![Ok(0.into()), Ok((CLUSTER_SLOTS - 1).into())];
             responses.reserve(addrs.len());
             responses.push(Ok(format_node(leader_id, addrs[leader_index])));
@@ -64,19 +67,23 @@ fn format_node(node_id: NodeId, addr: SocketAddr) -> Value {
 }
 
 pub fn readonly(conn: &mut RedisConnection, args: &[Bytes]) -> RedisResult {
-    if args.is_empty() {
-        conn.is_readonly = true;
-        Ok(Value::ok())
-    } else {
-        Err(ResponseError::WrongArity.into())
+    if !args.is_empty() {
+        return Err(ResponseError::WrongArity.into());
     }
+    if conn.shared.raft.is_none() {
+        return Err(ResponseError::ClusterDisabled.into());
+    }
+    conn.is_readonly = true;
+    Ok(Value::ok())
 }
 
 pub fn readwrite(conn: &mut RedisConnection, args: &[Bytes]) -> RedisResult {
-    if args.is_empty() {
-        conn.is_readonly = false;
-        Ok(Value::ok())
-    } else {
-        Err(ResponseError::WrongArity.into())
+    if !args.is_empty() {
+        return Err(ResponseError::WrongArity.into());
     }
+    if conn.shared.raft.is_none() {
+        return Err(ResponseError::ClusterDisabled.into());
+    }
+    conn.is_readonly = false;
+    Ok(Value::ok())
 }

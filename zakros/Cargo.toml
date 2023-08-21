@@ -11,7 +11,7 @@ bytes = { version = "1.4.0", features = ["serde"] }
 futures = { version = "0.3.28", default-features = false }
 parking_lot = "0.12.1"
 rand = "0.8.5"
-serde = { version = "1.0.183", features = ["derive"] }
+serde = { version = "1.0.185", features = ["derive"] }
 tarpc = { version = "0.33.0", features = [
 	"serde-transport",
 	"serde-transport-bincode",

@@ -1,4 +1,4 @@
-use crate::{store::StoreCommand, Shared};
+use crate::{store::RaftCommand, Shared};
 use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tarpc::{context::Context, tokio_serde::formats::Bincode};
@@ -6,14 +6,14 @@ use tokio::{io::AsyncWriteExt, net::TcpStream, time::timeout};
 use tokio_util::codec::LengthDelimitedCodec;
 use zakros_raft::{
     rpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport},
-    NodeId, RaftResult,
+    NodeId, Raft, RaftError, RaftResult,
 };
 use zakros_redis::pubsub::PubSubMessage;
 
 #[tarpc::service]
 pub trait RpcService {
     async fn append_entries(
-        request: AppendEntries<StoreCommand>,
+        request: AppendEntries<RaftCommand>,
     ) -> RaftResult<AppendEntriesResponse>;
 
     async fn request_vote(request: RequestVote) -> RaftResult<RequestVoteResponse>;
@@ -37,7 +37,7 @@ impl RpcClient {
 
 #[async_trait]
 impl Transport for RpcClient {
-    type Command = StoreCommand;
+    type Command = RaftCommand;
     type Error = anyhow::Error;
 
     async fn send_append_entries(
@@ -104,6 +104,13 @@ impl RpcServer {
     pub(crate) fn new(shared: Arc<Shared>) -> Self {
         Self(shared)
     }
+
+    fn raft(&self) -> RaftResult<&Raft<RaftCommand>> {
+        match &self.0.raft {
+            Some(raft) => Ok(raft),
+            None => Err(RaftError::Shutdown),
+        }
+    }
 }
 
 #[tarpc::server]
@@ -111,9 +118,9 @@ impl RpcService for RpcServer {
     async fn append_entries(
         self,
         _: Context,
-        request: AppendEntries<StoreCommand>,
+        request: AppendEntries<RaftCommand>,
     ) -> RaftResult<AppendEntriesResponse> {
-        self.0.raft.append_entries(request).await
+        self.raft()?.append_entries(request).await
     }
 
     async fn request_vote(
@@ -121,7 +128,7 @@ impl RpcService for RpcServer {
         _: Context,
         request: RequestVote,
     ) -> RaftResult<RequestVoteResponse> {
-        self.0.raft.request_vote(request).await
+        self.raft()?.request_vote(request).await
     }
 
     async fn publish(self, _: Context, message: PubSubMessage) {
