@@ -37,6 +37,8 @@ fn generate_info_str(shared: &Shared, sections: u8) -> std::io::Result<Bytes> {
     if sections & SERVER != 0 {
         is_first = false;
         out.write_all(b"# Server\r\n")?;
+        write!(out, "arch_bits:{}\r\n", usize::BITS)?;
+        write!(out, "process_id:{}\r\n", std::process::id())?;
         write!(out, "run_id:{}\r\n", shared.run_id.as_bstr())?;
         write!(out, "tcp_port:{}\r\n", shared.config.port)?;
         let now = SystemTime::now();
