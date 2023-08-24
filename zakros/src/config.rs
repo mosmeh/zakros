@@ -2,6 +2,7 @@ use bstr::ByteSlice;
 use serde::Deserialize;
 use std::{
     net::{IpAddr, SocketAddr},
+    num::NonZeroUsize,
     path::PathBuf,
 };
 
@@ -19,6 +20,9 @@ pub struct Config {
 
     #[serde(default = "defaults::dir")]
     pub dir: PathBuf,
+
+    #[serde(default = "defaults::worker_threads")]
+    pub worker_threads: NonZeroUsize,
 
     #[serde(default = "defaults::cluster_addrs")]
     pub cluster_addrs: Vec<SocketAddr>,
@@ -44,11 +48,12 @@ mod defaults {
     use super::RaftStorageKind;
     use std::{
         net::{IpAddr, Ipv4Addr, SocketAddr},
+        num::NonZeroUsize,
         path::PathBuf,
     };
 
     pub const fn bind() -> IpAddr {
-        IpAddr::V4(Ipv4Addr::LOCALHOST)
+        IpAddr::V4(Ipv4Addr::UNSPECIFIED)
     }
 
     pub const fn port() -> u16 {
@@ -61,6 +66,10 @@ mod defaults {
 
     pub fn dir() -> PathBuf {
         "./data".into()
+    }
+
+    pub fn worker_threads() -> NonZeroUsize {
+        NonZeroUsize::new(num_cpus::get()).unwrap()
     }
 
     pub const fn cluster_addrs() -> Vec<SocketAddr> {

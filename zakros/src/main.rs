@@ -30,8 +30,12 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::try_init().map_err(anyhow::Error::msg)?;
 
     let config = Config::from_args()?;
-    tokio::runtime::Runtime::new()?.block_on(async { tokio::spawn(serve(config)).await })??;
-    Ok(())
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(config.worker_threads.get())
+        .build()?
+        .block_on(async { tokio::spawn(serve(config)).await })?
+        .map_err(Into::into)
 }
 
 async fn is_rpc(conn: &mut TcpStream) -> std::io::Result<bool> {
