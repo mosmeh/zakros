@@ -13,6 +13,8 @@ const HLL_DENSE: u8 = 0;
 
 const HLL_ALPHA_INF: f64 = 0.7213475204444817;
 
+// TODO: support HLL_SPARSE format
+
 // Format
 // +------+---+-----+----------+--------------+
 // | HYLL | E | N/U | Cardin.  | Registers... |

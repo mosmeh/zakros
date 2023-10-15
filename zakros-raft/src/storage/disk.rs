@@ -13,6 +13,9 @@ use tokio::{
 };
 use tokio_util::codec::{Decoder, Encoder, Framed, FramedRead};
 
+// TODO: checksum
+// TODO: in-memory cache for recent entries
+
 #[derive(Debug, thiserror::Error)]
 pub enum DiskStorageError {
     #[error("index is too large")]
@@ -37,13 +40,18 @@ impl<C> DiskStorage<C> {
     pub async fn new(dir_path: impl Into<PathBuf>) -> Result<Self, DiskStorageError> {
         let dir_path = dir_path.into();
         tokio::fs::create_dir_all(&dir_path).await?;
+
+        // Some environments (e.g. Windows) can't open directories
         let dir = File::open(&dir_path).await.ok();
+
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
             .write(true)
             .open(dir_path.join("log"))
             .await?;
+
+        // TODO: handle partially written entries by truncating them
         let mut size_reader = FramedRead::new(&mut file, SizeDecoder::default());
         let mut offsets = Vec::new();
         let mut current_offset = 0;
@@ -51,7 +59,9 @@ impl<C> DiskStorage<C> {
             offsets.push(current_offset);
             current_offset += size? + HEADER_SIZE as u64;
         }
+
         let framed = Framed::new(file, EntryCodec::default());
+
         Ok(Self {
             dir_path,
             dir,
@@ -101,6 +111,7 @@ where
     }
 
     async fn entry(&mut self, index: u64) -> Result<Option<Entry<Self::Command>>, Self::Error> {
+        // TODO: make index 0-origin
         let index: usize = if index > 0 {
             (index - 1)
                 .try_into()
@@ -148,6 +159,9 @@ where
             self.current_offset += size + HEADER_SIZE as u64;
             self.offsets.push(offset);
         }
+
+        // TODO: to improve throughput, do not immediately flush, and instead
+        //       call persist_entries() periodically or in idle moments
         self.persist_entries().await?;
         Ok(())
     }

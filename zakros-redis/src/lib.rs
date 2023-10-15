@@ -71,6 +71,9 @@ pub enum ResponseError {
 
 pub type RedisResult = Result<Value, RedisError>;
 
+// TODO: use copy-on-write for string type
+// TODO: use actual list data structure for list type
+
 pub enum Object {
     String(Vec<u8>),
     List(VecDeque<Bytes>),

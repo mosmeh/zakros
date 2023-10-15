@@ -19,6 +19,8 @@ pub async fn psubscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<()
         conn.framed.feed(Ok(response)).await?;
     }
     conn.framed.flush().await?;
+
+    // TODO: handle commands from client
     while let Some(message) = conn.subscriber.next().await.transpose()? {
         conn.framed
             .send(Ok(Value::Array(vec![
@@ -139,6 +141,8 @@ pub async fn subscribe(conn: &mut RedisConnection, args: &[Bytes]) -> Result<(),
         conn.framed.feed(Ok(response)).await?;
     }
     conn.framed.flush().await?;
+
+    // TODO: handle commands from client
     while let Some(message) = conn.subscriber.next().await.transpose()? {
         conn.framed
             .send(Ok(Value::Array(vec![

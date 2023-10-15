@@ -49,6 +49,8 @@ impl RedisConnection {
 
     async fn serve(mut self) -> std::io::Result<()> {
         while let Some(decoded) = self.framed.next().await {
+            // TODO: reuse the `decoded` buffer to avoid the allocation
+            //       on every command
             let strings = match decoded {
                 Ok(strings) => strings,
                 Err(RespError::Io(err)) => return Err(err),
@@ -85,7 +87,10 @@ impl RedisConnection {
                             }))
                             .await?
                     }
-                    RaftError::Shutdown => panic!("Raft server is shut down"),
+                    RaftError::Shutdown => {
+                        // TODO: gracefully shut down server
+                        panic!("Raft server is shut down")
+                    }
                 },
                 Err(CommandError::SubscriberRecv(SubscriberRecvError::Lagged)) => return Ok(()),
             }

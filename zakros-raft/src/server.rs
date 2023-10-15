@@ -15,6 +15,11 @@ use tokio::{
     time::Instant,
 };
 
+// TODO: to improve performance, do not immediately flush after receiving
+//       client requests and do more batching
+// TODO: implement PreVote and CheckQuorum optimizations
+// TODO: support dynamic cluster membership
+
 pub struct Server<C, M, S, T>
 where
     C: Command,

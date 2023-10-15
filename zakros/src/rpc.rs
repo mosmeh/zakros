@@ -35,6 +35,8 @@ impl RpcClient {
     }
 }
 
+// TODO: keep connections to peers rather than connecting each time RPC is sent
+
 #[async_trait]
 impl Transport for RpcClient {
     type Command = RaftCommand;

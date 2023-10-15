@@ -8,6 +8,8 @@ use super::{Entry, Metadata};
 use crate::Command;
 use async_trait::async_trait;
 
+// TODO: support log compaction
+
 #[async_trait]
 pub trait Storage: Send + Sync + 'static {
     type Command: Command;

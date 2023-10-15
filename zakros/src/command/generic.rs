@@ -8,6 +8,7 @@ pub fn select(args: &[Bytes]) -> RedisResult {
     if index.to_i32()? == 0 {
         Ok(Value::ok())
     } else {
+        // TODO: support multiple databases when Raft is disabled
         Err(ResponseError::Other("SELECT is not allowed in cluster mode").into())
     }
 }
