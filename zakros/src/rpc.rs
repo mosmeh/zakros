@@ -72,7 +72,7 @@ impl Transport for RpcClient {
 }
 
 impl RpcClient {
-    pub const RPC_MARKER: &[u8] = b"\0EZwHMud4TueVKxhHinaj3PgyZhSm8Nj";
+    pub const RPC_MARKER: &'static [u8] = b"\0EZwHMud4TueVKxhHinaj3PgyZhSm8Nj";
 
     async fn client(&self, node_id: NodeId) -> std::io::Result<RpcServiceClient> {
         let addr = self.cluster_addrs[Into::<u64>::into(node_id) as usize];
