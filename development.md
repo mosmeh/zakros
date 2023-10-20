@@ -21,3 +21,17 @@ Options are passed through to `runtest`:
     --port 6380 \ # target port 6380
     --tags -slow  # skip slow tests
 ```
+
+# Running fuzzers
+
+```sh
+cargo install cargo-fuzz
+
+cd zakros-redis/fuzz
+
+# list fuzzing targets
+cargo fuzz list
+
+# run fuzzer
+cargo +nightly fuzz resp
+```
