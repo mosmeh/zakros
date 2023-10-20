@@ -19,6 +19,7 @@ use tokio::{
     sync::Semaphore,
 };
 use tokio_util::codec::LengthDelimitedCodec;
+use tracing_subscriber::{fmt::Subscriber, EnvFilter};
 use zakros_raft::{
     config::RaftConfig,
     storage::{DiskStorage, MemoryStorage},
@@ -27,7 +28,13 @@ use zakros_raft::{
 use zakros_redis::pubsub::Publisher;
 
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::try_init().map_err(anyhow::Error::msg)?;
+    let env_filter = EnvFilter::builder()
+        .with_default_directive("zakros=INFO".parse().unwrap())
+        .from_env_lossy();
+    Subscriber::builder()
+        .with_env_filter(env_filter)
+        .try_init()
+        .map_err(anyhow::Error::msg)?;
 
     let config = Config::from_args()?;
     tokio::runtime::Builder::new_multi_thread()

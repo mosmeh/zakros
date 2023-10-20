@@ -25,6 +25,9 @@ tokio = { version = "1.33.0", features = [
 ] }
 tokio-util = { version = "0.7.9", features = ["codec"] }
 tracing = "0.1.39"
-tracing-subscriber = { version = "0.3.17", features = ["parking_lot"] }
+tracing-subscriber = { version = "0.3.17", features = [
+	"parking_lot",
+	"env-filter",
+] }
 zakros-raft = { path = "../zakros-raft" }
 zakros-redis = { path = "../zakros-redis" }
