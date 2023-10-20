@@ -6,14 +6,34 @@ impl CommandSpec for command::Cluster {
     const ARITY: Arity = Arity::AtLeast(1);
 }
 
+impl CommandSpec for command::Config {
+    const NAME: &'static str = "CONFIG";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
 impl CommandSpec for command::Debug {
     const NAME: &'static str = "DEBUG";
     const ARITY: Arity = Arity::AtLeast(1);
 }
 
+impl CommandSpec for command::Function {
+    const NAME: &'static str = "FUNCTION";
+    const ARITY: Arity = Arity::AtLeast(1);
+}
+
+impl CommandSpec for command::Hello {
+    const NAME: &'static str = "HELLO";
+    const ARITY: Arity = Arity::AtLeast(0);
+}
+
 impl CommandSpec for command::Info {
     const NAME: &'static str = "INFO";
     const ARITY: Arity = Arity::AtLeast(0);
+}
+
+impl CommandSpec for command::Memory {
+    const NAME: &'static str = "MEMORY";
+    const ARITY: Arity = Arity::AtLeast(1);
 }
 
 impl CommandSpec for command::PSubscribe {

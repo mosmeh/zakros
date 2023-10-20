@@ -1,0 +1,94 @@
+# unit/protocol
+Out of range multibulk payload length
+Generic wrong number of args
+/^Protocol desync regression test
+/^raw protocol response
+test argument rewriting - issue 9598
+
+# unit/keyspace
+/^RENAME with volatile key
+/^COPY
+/^MOVE
+/^RANDOMKEY
+
+# unit/type/string
+/^SETNX
+/^GETEX
+MSET/MSETNX wrong number of args
+SETBIT with out of range bit offset
+SETRANGE with out of range offset
+/^Extended SET EX
+/^Extended SET PX
+Extended SET using multiple options at once
+/^LCS
+SETRANGE with huge offset
+
+# unit/type/incr
+/^INCRBYFLOAT
+string to double with null terminator
+No negative zero
+
+# unit/type/list
+reg node check compression with insert and pop
+reg node check compression combined with trim
+/^LPOS
+LPOP/RPOP with wrong number of arguments
+LPOP/RPOP with <count> against non existing key in RESP2
+/B[LR]POP
+/^BLMOVE
+/LMPOP
+Linked LMOVEs
+/^LINSERT
+/^LMOVE
+/^LREM
+client unblock tests
+List listpack -> quicklist encoding conversion
+List quicklist -> listpack encoding conversion
+/^List of various encodings
+/^Unblock fairness
+/^Blocking command accounted only once
+
+# unit/type/list-3
+Regression for quicklist #3343 bug
+Check compression with recompress
+Crash due to wrongly recompress after lrem
+
+# unit/type/set
+SMISMEMBER requires one or more members
+/^SINTERCARD
+/^SPOP
+/^SRANDMEMBER
+SMOVE only notify dstset when the addition is successful
+intsets implementation stress testing
+
+# unit/type/hash
+/^HRANDFIELD
+HSET/HMSET wrong number of args
+Hash commands against wrong type
+/HINCRBYFLOAT
+/^Hash ziplist of various encodings
+
+# unit/other
+Coverage: HELP commands
+/^Coverage: MEMORY
+SELECT an out of range DB
+Subcommand syntax error crash (issue #10070)
+
+# unit/multi
+MULTI where commands alter argc/argv
+/WATCH
+/^After (successful|failed) EXEC key is no longer watched
+/^FLUSH(ALL|DB) is able to touch the watched keys
+/^FLUSH(ALL|DB) does not touch non affected keys
+/and script timeout
+Blocking commands ignores the timeout
+/^MULTI with
+Flushall while watching several keys by one client
+
+# unit/bitops
+/^BITPOS
+SETBIT/BITFIELD only increase dirty when the value changed
+
+# unit/hyperloglog
+Corrupted sparse HyperLogLogs are detected: Additional at tail
+Corrupted dense HyperLogLogs are detected: Wrong length

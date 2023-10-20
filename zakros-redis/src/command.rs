@@ -262,9 +262,13 @@ stateless_commands! {
 }
 
 system_commands! {
+    Config,
     Cluster,
     Debug,
+    Function,
+    Hello,
     Info,
+    Memory,
     PSubscribe,
     Publish,
     PubSub,
