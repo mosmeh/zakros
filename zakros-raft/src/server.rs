@@ -528,8 +528,6 @@ where
                         }
                     }
                 }
-                EntryKind::AddNode { .. } => todo!(),
-                EntryKind::RemoveNode(_) => todo!(),
             }
             self.last_applied_index = next_applied_index;
             self.last_applied_term = entry.term;

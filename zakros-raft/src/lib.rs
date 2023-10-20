@@ -9,7 +9,7 @@ use config::RaftConfig;
 use rpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport};
 use serde::{Deserialize, Serialize};
 use server::{Message, Server};
-use std::{fmt::Debug, net::SocketAddr, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 use storage::Storage;
 use tokio::sync::{mpsc, oneshot};
 
@@ -157,8 +157,6 @@ pub struct Entry<C> {
 enum EntryKind<C> {
     NoOp,
     Command(C),
-    AddNode { node_id: NodeId, addr: SocketAddr },
-    RemoveNode(NodeId),
 }
 
 #[derive(Default, Serialize, Deserialize)]
