@@ -37,13 +37,13 @@ See [the Redis command compatibility table](commands.md).
 ```sh
 # In separate terminals:
 
-$ cargo run -- --raft-node-id 0 --port 6379 \
+$ cargo run -- --node-id 0 --port 6379 \
     --cluster-addrs '127.0.0.1:6379 127.0.0.1:6380 127.0.0.1:6381'
 
-$ cargo run -- --raft-node-id 1 --port 6380 \
+$ cargo run -- --node-id 1 --port 6380 \
     --cluster-addrs '127.0.0.1:6379 127.0.0.1:6380 127.0.0.1:6381'
 
-$ cargo run -- --raft-node-id 2 --port 6381 \
+$ cargo run -- --node-id 2 --port 6381 \
     --cluster-addrs '127.0.0.1:6379 127.0.0.1:6380 127.0.0.1:6381'
 
 # With the cluster mode (-c), you can connect to any node and

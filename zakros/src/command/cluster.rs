@@ -28,9 +28,7 @@ pub async fn cluster(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, Co
             .map(|s| Ok((*s).into()))
             .collect(),
         )),
-        b"MYID" => Ok(format_node_id(NodeId::from(
-            conn.shared.config.raft_node_id,
-        ))),
+        b"MYID" => Ok(format_node_id(NodeId::from(conn.shared.config.node_id))),
         b"SLOTS" => {
             const CLUSTER_SLOTS: i64 = 16384;
             let leader_id = raft

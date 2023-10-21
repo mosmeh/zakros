@@ -24,14 +24,14 @@ pub struct Config {
     #[serde(default = "defaults::worker_threads")]
     pub worker_threads: NonZeroUsize,
 
+    #[serde(default = "defaults::node_id")]
+    pub node_id: u64,
+
     #[serde(default = "defaults::cluster_addrs")]
     pub cluster_addrs: Vec<SocketAddr>,
 
     #[serde(default = "defaults::raft_enabled")]
     pub raft_enabled: bool,
-
-    #[serde(default = "defaults::raft_node_id")]
-    pub raft_node_id: u64,
 
     #[serde(default = "defaults::raft_storage")]
     pub raft_storage: RaftStorageKind,
@@ -72,16 +72,16 @@ mod defaults {
         NonZeroUsize::new(num_cpus::get()).unwrap()
     }
 
+    pub const fn node_id() -> u64 {
+        0
+    }
+
     pub const fn cluster_addrs() -> Vec<SocketAddr> {
         Vec::new()
     }
 
     pub const fn raft_enabled() -> bool {
         true
-    }
-
-    pub const fn raft_node_id() -> u64 {
-        0
     }
 
     pub const fn raft_storage() -> RaftStorageKind {

@@ -49,7 +49,7 @@ pub async fn publish(conn: &RedisConnection, args: &[Bytes]) -> Result<Value, Co
     };
     let num_receivers = conn.shared.publisher.publish(message.clone());
     for i in 0..conn.shared.config.cluster_addrs.len() as u64 {
-        if i != conn.shared.config.raft_node_id {
+        if i != conn.shared.config.node_id {
             let rpc_handler = conn.shared.rpc_client.clone();
             let message = message.clone();
             tokio::spawn(async move { rpc_handler.publish(NodeId::from(i), message).await });

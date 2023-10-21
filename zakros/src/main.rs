@@ -118,7 +118,7 @@ impl Shared {
         let rpc_client = Arc::new(RpcClient::new(config.cluster_addrs.clone()));
 
         let raft = if config.raft_enabled {
-            let node_id = NodeId::from(config.raft_node_id);
+            let node_id = NodeId::from(config.node_id);
             let nodes = (0..config.cluster_addrs.len() as u64)
                 .map(NodeId::from)
                 .collect();
