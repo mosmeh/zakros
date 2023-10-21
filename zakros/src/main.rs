@@ -127,9 +127,8 @@ impl Shared {
             let rpc_client = rpc_client.clone();
             let raft = match config.raft_storage {
                 RaftStorageKind::Disk => {
-                    let storage =
-                        DiskStorage::new(config.dir.join(Into::<u64>::into(node_id).to_string()))
-                            .await?;
+                    let dir = format!("node-{}", Into::<u64>::into(node_id));
+                    let storage = DiskStorage::new(config.dir.join(dir)).await?;
                     Raft::new(node_id, nodes, raft_config, store, storage, rpc_client)
                 }
                 RaftStorageKind::Memory => {
