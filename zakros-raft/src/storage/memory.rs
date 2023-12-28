@@ -1,6 +1,5 @@
 use super::{Entry, Metadata, Storage};
 use crate::Command;
-use async_trait::async_trait;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MemoryStorageError {
@@ -22,7 +21,6 @@ impl<C> Default for MemoryStorage<C> {
     }
 }
 
-#[async_trait]
 impl<C: Command> Storage for MemoryStorage<C> {
     type Command = C;
     type Error = MemoryStorageError;

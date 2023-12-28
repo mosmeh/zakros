@@ -1,5 +1,4 @@
 use crate::{store::RaftCommand, Shared};
-use async_trait::async_trait;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tarpc::{context::Context, tokio_serde::formats::Bincode};
 use tokio::{io::AsyncWriteExt, net::TcpStream, time::timeout};
@@ -37,7 +36,6 @@ impl RpcClient {
 
 // TODO: keep connections to peers rather than connecting each time RPC is sent
 
-#[async_trait]
 impl Transport for RpcClient {
     type Command = RaftCommand;
     type Error = anyhow::Error;

@@ -1,23 +1,21 @@
 use crate::{Command, Entry, NodeId};
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-#[async_trait]
 pub trait Transport: Send + Sync + 'static {
     type Command: Command;
     type Error: Send + std::fmt::Debug;
 
-    async fn send_append_entries(
+    fn send_append_entries(
         &self,
         dest: NodeId,
         request: AppendEntries<Self::Command>,
-    ) -> Result<AppendEntriesResponse, Self::Error>;
+    ) -> impl std::future::Future<Output = Result<AppendEntriesResponse, Self::Error>> + std::marker::Send;
 
-    async fn send_request_vote(
+    fn send_request_vote(
         &self,
         dest: NodeId,
         request: RequestVote,
-    ) -> Result<RequestVoteResponse, Self::Error>;
+    ) -> impl std::future::Future<Output = Result<RequestVoteResponse, Self::Error>> + std::marker::Send;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

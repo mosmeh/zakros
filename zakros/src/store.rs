@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use bytes::Bytes;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
@@ -37,7 +36,6 @@ impl Store {
     }
 }
 
-#[async_trait]
 impl StateMachine for Store {
     type Command = RaftCommand;
 

@@ -6,29 +6,41 @@ pub use memory::MemoryStorage;
 
 use super::{Entry, Metadata};
 use crate::Command;
-use async_trait::async_trait;
+use futures::Future;
 
 // TODO: support log compaction
 
-#[async_trait]
 pub trait Storage: Send + Sync + 'static {
     type Command: Command;
     type Error: Send + std::fmt::Debug;
 
-    async fn load(&mut self) -> Result<Metadata, Self::Error>;
+    fn load(&mut self) -> impl Future<Output = Result<Metadata, Self::Error>> + Send;
 
     fn num_entries(&self) -> usize;
-    async fn entry(&mut self, index: u64) -> Result<Option<Entry<Self::Command>>, Self::Error>;
-    async fn entries(&mut self, start: u64) -> Result<Vec<Entry<Self::Command>>, Self::Error>;
-    async fn append_entries(&mut self, entries: &[Entry<Self::Command>])
-        -> Result<(), Self::Error>;
-    async fn truncate_entries(&mut self, index: u64) -> Result<(), Self::Error>;
+    fn entry(
+        &mut self,
+        index: u64,
+    ) -> impl Future<Output = Result<Option<Entry<Self::Command>>, Self::Error>> + Send;
+    fn entries(
+        &mut self,
+        start: u64,
+    ) -> impl Future<Output = Result<Vec<Entry<Self::Command>>, Self::Error>> + Send;
+    fn append_entries(
+        &mut self,
+        entries: &[Entry<Self::Command>],
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    fn truncate_entries(
+        &mut self,
+        index: u64,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
-    async fn persist_metadata(&mut self, metadata: &Metadata) -> Result<(), Self::Error>;
-    async fn persist_entries(&mut self) -> Result<(), Self::Error>;
+    fn persist_metadata(
+        &mut self,
+        metadata: &Metadata,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    fn persist_entries(&mut self) -> impl Future<Output = Result<(), Self::Error>> + Send;
 }
 
-#[async_trait]
 pub(crate) trait StorageExt: Storage {
     fn current_index(&self) -> u64 {
         self.num_entries().try_into().unwrap()

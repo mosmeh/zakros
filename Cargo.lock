@@ -1153,7 +1153,6 @@ name = "zakros"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "bstr",
  "bytes",
  "futures",
@@ -1175,7 +1174,6 @@ dependencies = [
 name = "zakros-raft"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "bincode",
  "byteorder",
  "bytes",

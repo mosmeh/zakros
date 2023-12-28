@@ -4,8 +4,8 @@ pub mod storage;
 
 mod server;
 
-use async_trait::async_trait;
 use config::RaftConfig;
+use futures::Future;
 use rpc::{AppendEntries, AppendEntriesResponse, RequestVote, RequestVoteResponse, Transport};
 use serde::{Deserialize, Serialize};
 use server::{Message, Server};
@@ -183,9 +183,11 @@ pub trait Command: Send + Sync + Clone + 'static {
     type Output: Send;
 }
 
-#[async_trait]
 pub trait StateMachine: Send + Sync + 'static {
     type Command: Command;
 
-    async fn apply(&mut self, command: Self::Command) -> <Self::Command as Command>::Output;
+    fn apply(
+        &mut self,
+        command: Self::Command,
+    ) -> impl Future<Output = <Self::Command as Command>::Output> + Send;
 }

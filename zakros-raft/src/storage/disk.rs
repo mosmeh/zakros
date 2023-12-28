@@ -1,6 +1,5 @@
 use super::Storage;
 use crate::{Command, Entry, Metadata};
-use async_trait::async_trait;
 use bincode::Options;
 use byteorder::{WriteBytesExt, LE};
 use bytes::{Buf, BufMut, BytesMut};
@@ -86,7 +85,6 @@ impl<C: Serialize> DiskStorage<C> {
     }
 }
 
-#[async_trait]
 impl<C> Storage for DiskStorage<C>
 where
     for<'de> C: Command + Serialize + Deserialize<'de>,
