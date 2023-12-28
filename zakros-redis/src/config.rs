@@ -263,7 +263,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         V: Visitor<'de>,
     {
         match self.peek()? {
-            Some(s) if s.is_empty() => {
+            Some([]) => {
                 self.consume()?;
                 visitor.visit_none()
             }

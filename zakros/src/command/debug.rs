@@ -43,7 +43,7 @@ pub fn debug(conn: &RedisConnection, args: &[Bytes]) -> RedisResult {
                 Some(size) => Some(size.to_u64()? as usize),
                 None => None,
             };
-            let prefix = match options.get(0) {
+            let prefix = match options.first() {
                 Some(prefix) => prefix.as_ref(),
                 None => b"key",
             };
